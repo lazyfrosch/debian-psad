@@ -1,0 +1,516 @@
+psad (2.1.5-2) unstable; urgency=low
+
+  * Added a dependency on bsd-mailx | mailx | mailutils package to provide the
+    mail command. (Closes: #521683)
+  * Added a dependency on exim4 | mail-transport-agent to provide the sendmail
+    command.
+  * Bumped up Standards-Version to 3.8.3.
+    + Handled the DEB_BUILD_OPTIONS:
+      Updated d.rules to handle the new options.
+      Added quilt framework.
+      Added patch fixes_build.diff to pass OPTS to the makefile, and honour
+      DEB_BUILD_OPTIONS.
+
+ -- Franck Joncourt <franck.mail@dthconnex.com>  Sat, 24 Oct 2009 14:18:17 +0200
+
+psad (2.1.5-1) unstable; urgency=low
+
+  * New upstream release
+  * Use of dh_installman:
+      - Updated install target in d.rules to remove manpages installation.
+      - Added dh_installman to the binary-arch target.
+      - Listed all manpages in psad.manpages.
+      - Removed the man page directory from d.dirs.
+  * Use nf2csv.1 instead of nfcsv.8 (not in upstream source anymore).
+  * Added the new fwcheck_psad.8 manpage. (Closes: #277457)
+  * Updated d.control
+    + Add fwsnort to the Suggests field.
+    + Add /me to Uploaders.
+    + Set compatibility level to 7 along with d.compat.
+    + Removed old ipchains dependency.
+    + Replaced the old default log daemon (sysklogd) by the new one (rsyslog).
+  * Created new init script from scratch. (Closes: #504567)
+  * Created psad.preinst (Closes: #497574).
+  * Removed psad.debhelper.log from the debian directory.
+  * Removed preinst script whose goal was to stop the daemon through the
+    initscript. (Debhelper can handle that alone).
+  * Updated postinst script.
+    + Do not do backup of configuration files anymore (let dpkg do its work).
+    + Update HOSTNAME variable in psad.conf automatically.
+    + Do not create the fifo file. Psad's default behavior has changed.
+  * Updated postrm script and removed prerm script. We take care of the
+    cleaning in postrm.
+  * Added d.NEWS to report important changes in the package.
+
+ -- Franck Joncourt <franck.mail@dthconnex.com>  Sat, 21 Feb 2009 15:40:31 +0100
+
+psad (2.1.4-1) unstable; urgency=low
+
+  * New upstream release
+  * Acknowledge NMU.
+
+ -- Daniel Gubser <guterm@debian.org>  Mon, 25 Aug 2008 14:10:58 +0200
+
+psad (2.1.3-1.2) unstable; urgency=low
+
+  * applied patch for removing psad with /var/run/ mounted as tmpfs 
+    (Closes: #491558)
+
+ -- Daniel Gubser <guterm@debian.org>  Fri, 22 Aug 2008 17:09:30 +0200
+
+psad (2.1.3-1.1) unstable; urgency=low
+
+  * Remove of old, stale config files (Closes #455031)
+
+ -- Daniel Gubser <guterm@debian.org>  Mon, 30 Jun 2008 16:17:37 +0200
+
+psad (2.1.3-1) unstable; urgency=low
+
+  * New upstream release
+
+ -- Daniel Gubser <guterm@debian.org>  Tue, 17 Jun 2008 13:16:49 +0200
+
+psad (2.1.2-1.1) unstable; urgency=low
+
+  * Non-maintainer upload.
+  * Add both libiptables-parse-perl and libiptables-chainmgr-perl as new
+    dependencies.
+  * Replace /etc/init.d by invoke-rc.d in the preinst file.
+  * Compat version is now set through the compat file.
+  * Add copyright notice in copyright file.
+  * Remove /usr/share/psad from the dirs file.
+  * Do not ignore make errors anymore in the clean stage.
+
+ -- Franck Joncourt <franck.mail@dthconnex.com>  Sun, 04 May 2008 23:10:44 +0200
+
+psad (2.1.2-1) unstable; urgency=low
+
+  * New upstream release
+
+ -- Daniel Gubser <guterm@debian.org>  Wed,  9 Apr 2008 12:49:33 +0200
+
+psad (2.1.1-1.1) unstable; urgency=low
+
+  * Non-maintainer upload to solve release goal.
+  * Add LSB dependency header to init.d scripts (Closes: #465412).
+  * Fix bashism in postinst script (Closes: #472237).
+
+ -- Petter Reinholdtsen <pere@debian.org>  Sat, 29 Mar 2008 21:05:52 +0100
+
+psad (2.1.1-1) unstable; urgency=low
+
+  * New upstream release
+  * changed dependency for syslod daemon to "Depends: $preferred_syslog |
+    system-log-daemon (Closes: #464006)
+
+ -- Daniel Gubser <guterm@debian.org>  Tue, 29 Jan 2008 06:39:54 +0100
+
+psad (2.1-1) unstable; urgency=low
+
+  * New upstream release
+
+ -- Daniel Gubser <guterm@debian.org>  Wed, 31 Oct 2007 10:32:30 +0100
+ 
+psad (2.0.8-1) unstable; urgency=low
+
+  * New upstream release
+
+ -- Daniel Gubser <guterm@debian.org>  Mon,  3 Sep 2007 14:07:45 +0200
+ 
+psad (2.0.7-1) unstable; urgency=low
+
+  * New upstream release
+  * snort_rule_dl should be checked (Closes: #418777)
+
+ -- Daniel Gubser <guterm@debian.org>  Fri,  1 Jun 2007 13:59:32 +0200
+ 
+psad (2.0.6-1) unstable; urgency=low
+
+  * New upstream release
+
+ -- Daniel Gubser <guterm@debian.org>  Tue, 27 Mar 2007 09:42:43 +0200
+
+psad (2.0.5-1) unstable; urgency=low
+
+  * New upstream release
+  * saving old config files: alert, fw_search, kmsgsd and psadwatchd
+
+ -- Daniel Gubser <guterm@debian.org>  Tue, 27 Mar 2007 08:33:39 +0100
+
+psad (2.0.4-1) unstable; urgency=low
+
+  * New upstream release
+
+ -- Daniel Gubser <guterm@debian.org>  Mon, 29 Jan 2007 07:52:27 +0100
+
+psad (2.0.3-1) unstable; urgency=low
+
+  * New upstream release
+  * Finaly checking of /usr/lib/psad/ was removed (Closes: #403566)
+  * Psad.pm, kmsgsd.pl and psadwatchd.pl removed
+
+ -- Daniel Gubser <guterm@debian.org>  Tue,  2 Jan 2007 12:27:13 +0100
+
+psad (2.0.2-1) unstable; urgency=low
+
+  * New upstream release
+  * Removed check of /usr/lib/psad/ by Michael Rash (Closes: #403566)
+
+ -- Daniel Gubser <guterm@debian.org>  Tue, 26 Dec 2006 11:52:27 +0100
+
+psad (2.0.1-2) unstable; urgency=low
+
+  * changed some text in README.Debian
+  * added the ip_options file 
+
+ -- Daniel Gubser <guterm@debian.org>  Mon, 18 Dec 2006 09:12:41 +0100
+
+psad (2.0.1-1) unstable; urgency=low
+
+  * New upstream release
+
+ -- Daniel Gubser <guterm@debian.org>  Tue, 12 Dec 2006 14:45:26 +0100
+
+psad (1.4.8-1) unstable; urgency=low
+
+  * New upstream release
+
+ -- Daniel Gubser <guterm@debian.org>  Tue, 17 Oct 2006 06:50:43 +0200
+
+psad (1.4.7-1) unstable; urgency=low
+
+  * New upstream release
+  * IPTABLES_AUTO_RULENUM variable removed by Upstream (Closes: #351196)
+  * ChainMgr.pm fixed by Upstream (Closes: #351191)
+
+ -- Daniel Gubser <guterm@debian.org>  Tue, 12 Sep 2006 06:33:09 +0200
+
+psad (1.4.6-1) unstable; urgency=low
+
+  * New upstream release
+  * added FW_HELP to Docs
+  * new files: snort_rule_dl, snort_rules/classification.config and
+    snort_rules/reference.config
+
+ -- Daniel Gubser <guterm@debian.org>  Tue, 13 Jun 2006 15:06:41 +0200
+
+psad (1.4.5-1) unstable; urgency=low
+
+  * New upstream release
+
+ -- Daniel Gubser <guterm@debian.org>  Fri, 20 Jan 2006 06:34:44 +0100
+
+psad (1.4.4-1) unstable; urgency=low
+
+  * New upstream release
+  * added proxyscan.freenode.net to auto_dl (Closes: #339486)
+
+ -- Daniel Gubser <guterm@debian.org>  Mon, 28 Nov 2005 14:49:53 +0100
+
+psad (1.4.3-1) unstable; urgency=low
+
+  * New upstream release
+  * added Depends for metalog (Closes: #306367) but support is shaky
+  * upstream fixed auto-blocking code (Closes: #319525)
+  * added README.SYSLOG in debian/docs
+
+ -- Daniel Gubser <guterm@debian.org>  Wed, 28 Sep 2005 07:46:18 +0200
+
+psad (1.4.2-1) unstable; urgency=low
+
+  * New upstream release
+
+ -- Daniel Gubser <guterm@debian.org>  Wed, 20 Jul 2005 06:43:57 +0200
+
+psad (1.4.1-1) unstable; urgency=low
+
+  * New upstream release
+  * included FW_HELP from upstream
+  * added IPTables-ChainMgr from upstream
+
+ -- Daniel Gubser <guterm@debian.org>  Tue, 15 Mar 2005 06:24:55 +0100
+
+psad (1.4.0-1) unstable; urgency=low
+
+  * New upstream release
+  * corrected man page for psadfifo (Closes: #283337)
+  * added Depends for libcarp-clan-perl
+
+ -- Daniel Gubser <guterm@debian.org>  Tue, 30 Nov 2004 06:06:11 +0100
+
+psad (1.3.4-2) unstable; urgency=low
+
+  * cleaned building IPTables::Parse so it will build again (Closes: #277674) 
+
+ -- Daniel Gubser <guterm@debian.org>  Wed,  3 Nov 2004 06:38:45 +0100
+
+psad (1.3.4-1) unstable; urgency=low
+
+  * New upstream release
+  * Removed Depends for libbit-vector-perl as libdate-calc-perl already depends
+    on it
+  * Uptream changed firewall parsing code (Closes: #260549)
+
+ -- Daniel Gubser <guterm@debian.org>  Mon, 18 Oct 2004 08:52:48 +0200
+
+psad (1.3.3-2) unstable; urgency=low
+
+  * corrected README.Debian for syslog-ng instructions (Closes: #274959)
+  * added check for missing psad.conf (Closes: #273740)
+  * Depends new on psmisc (for killall) (Closes: #273582)
+
+ -- Daniel Gubser <guterm@debian.org>  Tue,  5 Oct 2004 06:09:38 +0200
+
+psad (1.3.3-1) unstable; urgency=low
+
+  * New upstream release
+  * commented signatures, snort_rules and auto_dl out in the init.d file as
+    all is configured in the psad.conf file (Closes: #264493)
+
+ -- Daniel Gubser <guterm@debian.org>  Tue, 14 Sep 2004 06:24:57 +0200
+
+psad (1.3.2-3) unstable; urgency=low
+
+  * corrected typo in psad.conf for syslog-ng entry (was syslogd-ng) 
+
+ -- Daniel Gubser <guterm@debian.org>  Wed, 11 Aug 2004 16:28:13 +0200
+
+psad (1.3.2-2) unstable; urgency=low
+
+  * re-adjusted the psad-init-file for the new conffiles (Closes: #257543)
+  * outcommentet syslogcmd in psad.conf so postinst can choose between
+    sysklogd and syslog-ng (Closes: #260552)
+
+ -- Daniel Gubser <guterm@debian.org>  Fri,  6 Aug 2004 06:54:18 +0200
+
+psad (1.3.2-1) unstable; urgency=low
+
+  * New upstream release
+  * depends now on whois (not recommends any more) (Closes: #250049)
+  * added new conffile fw_search.conf and fwcheck_psad
+  * added also new conffile auto_dl, icmp_types and posf (for psad_auto_ips,
+    psad_icmp_types and psad_posf)
+
+ -- Daniel Gubser <guterm@debian.org>  Fri, 25 Jun 2004 06:09:15 +0200
+
+psad (1.3.1-1) unstable; urgency=low
+
+  * New upstream release
+  * added psad_icmp_type to /etc/psad
+
+ -- Daniel Gubser <guterm@debian.org>  Wed, 24 Dec 2003 06:36:31 +0100
+
+psad (1.3-1) unstable; urgency=low
+
+  * New upstream release
+  * removed saving option for diskmond.conf
+
+ -- Daniel Gubser <daniel.gubser@gutreu.ch>  Thu,  4 Dec 2003 06:57:06 +0100
+
+psad (1.2.4-1) unstable; urgency=low
+
+  * New upstream release
+  * deleted debian/conffiles for all files in /etc/ are conffiles
+  * added depencies for libbit-vector-perl
+  * changed Perl Vendor files form /usr/share/perl5 to /usr/lib/perl5
+  * removed diskmond and diskmond as it is now integrated with psad
+
+ -- Daniel Gubser <daniel.gubser@gutreu.ch>  Mon, 20 Oct 2003 06:34:31 +0200
+
+psad (1.2.3-2) unstable; urgency=low
+
+  * changed build-temp-dir for correct debhelper 
+  * moved Perl vendor modules from /usr/share/perl5 to /usr/lib/perl5
+    (thanks to Martin Michlmayr <tbm@cyrius.com> for both)
+
+ -- Daniel Gubser <daniel.gubser@gutreu.ch>  Tue,  7 Oct 2003 14:20:44 +0200
+
+psad (1.2.3-1) unstable; urgency=low
+
+  * New upstream release
+
+ -- Daniel Gubser <daniel.gubser@gutreu.ch>  Wed, 17 Sep 2003 10:46:22 +0200
+
+psad (1.2.2-1) unstable; urgency=low
+
+  * New upstream release
+
+ -- Daniel Gubser <daniel.gubser@gutreu.ch>  Tue, 26 Aug 2003 06:29:54 +0200
+
+psad (1.2.1-2) unstable; urgency=low
+
+  * changed depends from "libc6 (>> 2.3)" to "${shlibs:Depends}" (Closes:
+    #202049)
+
+ -- Daniel Gubser <daniel.gubser@gutreu.ch>  Tue, 22 Jul 2003 07:38:54 +0200
+
+psad (1.2.1-1) unstable; urgency=low
+
+  * New upstream release
+
+ -- Daniel Gubser <daniel.gubser@gutreu.ch>  Mon, 14 Jul 2003 07:10:17 +0200
+
+psad (1.2-3) unstable; urgency=low
+
+  * changed syslog example in psad.8 with "|" (Closes: #200685) 
+
+ -- Daniel Gubser <daniel.gubser@gutreu.ch>  Thu, 10 Jul 2003 06:39:20 +0200
+
+psad (1.2-2) unstable; urgency=low
+
+  * Sponsored upload to Debian.
+
+ -- Javier Fernandez-Sanguino Pen~a <jfs@computer.org>  Mon,  7 Jul 2003 20:19:35 +0200
+
+psad (1.2-1) unstable; urgency=low
+
+  * New upstream release
+  * added depencies to libc6 (>> 2.3) (Closes: #195967)
+  * upstream fixed bug with syslog-ng (Closes: #194662)
+  
+
+ -- Daniel Gubser <daniel.gubser@gutreu.ch>  Fri, 20 Jun 2003 07:39:54 +0200
+
+psad (1.1.1-2) unstable; urgency=low
+
+  * Sponsored upload to Debian (Closes: #184996) 
+
+ -- Javier Fernandez-Sanguino Pen~a <jfs@computer.org>  Mon, 12 May 2003 23:41:33 +0200
+
+psad (1.1.1-1) unstable; urgency=low
+
+  * New upstream release
+  * changes all doc's for psadfifo (Closes: #184996)
+  * added IPTables-Parse
+  * added snort_rules (also in psad.init)
+
+ -- Daniel Gubser <daniel.gubser@gutreu.ch>  Sun, 11 May 2003 14:55:59 +0200
+
+psad (1.0-2) unstable; urgency=low
+
+  * Sponsored upload of this new upstream.
+  * Now works with syslog-ng (Closes: #174926)
+  * Slight changes to the debian/psad.init file so that it does not
+  send errors if the file do not exist. Also, cleaner check to test
+  the config files (remove comments)
+  * Fixed the prerm script for it to work when /var/run/psad is empty
+  (otherwise you cannot install/uninstall the package if psad has
+  never run)
+
+ -- Javier Fernandez-Sanguino Pen~a <jfs@computer.org>  Sat, 15 Mar 2003 11:15:12 +0100
+
+psad (1.0-1) unstable; urgency=low
+
+  * New upstream release
+
+ -- Daniel Gubser <daniel.gubser@gutreu.ch>  Fri, 28 Feb 2003 16:37:31 +0100
+
+psad (1.0.0-pre5-1) unstable; urgency=low
+
+  * New upstream release
+  * works now with syslog-ng (Closes: #174926)
+  * all manpages now in upstream version
+
+ -- Daniel Gubser <daniel.gubser@gutreu.ch>  Wed, 19 Feb 2003 07:21:08 +0100
+
+psad (1.0.0-pre4-1) unstable; urgency=low
+
+  * New upstream release
+  * changes Architecture from all to any for kmsgsd and psadwatchd are now
+    written in C
+  * new location for psadfifo is now in /var/lib/psad/
+
+ -- Daniel Gubser <daniel.gubser@gutreu.ch>  Tue, 7 Jan 2003 07:03:13 +0100
+
+psad (0.9.9-12) unstable; urgency=low
+
+  * Adopted Daniel's version and submitted to the archive. This version
+    fixes the architecture (to all) and provides new manpages (Closes:
+    #168059)
+
+ -- Javier Fernandez-Sanguino Pena <jfs@computer.org>  Mon, 16 Dec 2002 22:59:48 +0100
+
+psad (0.9.9-11) unstable; urgency=low
+
+  * removed man page for pscan (which is not part of this package)
+
+ -- Daniel Gubser <daniel.gubser@gutreu.ch>  Mon,  2 Dec 2002 10:09:07	+0100
+
+
+psad (0.9.9-10) unstable; urgency=low
+
+  * changed Architecture to all instead any (Closes: #168059)
+  * added man pages for diskmond, kmsgsd, pscan, psadwatchd
+
+ -- Daniel Gubser <daniel.gubser@gutreu.ch>  Mon, 26 Nov 2002 16:32:29 +0100
+
+psad (0.9.9-9) unstable; urgency=low
+
+  * Fixed init.d file to check properly when the daemon is stopped
+  * Adopted Daniel's new version (Closes:  #167877)
+
+ -- Javier Fernandez-Sanguino Pen~a <jfs@computer.org>  Wed,  6 Nov 2002 13:31:11 +0100
+
+psad (0.9.9-8) unstable; urgency=low
+
+  * changed lockfile for init from /var/lock/subsys/psad to
+    /var/run/psad.lock (former was for RH) (Closes: #167877)
+
+ -- Daniel Gubser <daniel.gubser@gutreu.ch>  Wed,  6 Nov 2002 11:37:43 +0100
+
+psad (0.9.9-7) unstable; urgency=low
+
+  * Fixed dependancies. Psad cannot work without a firewalling 
+    code package.
+
+ -- Javier Fernandez-Sanguino Pen~a <jfs@computer.org>  Mon, 28 Oct 2002 19:14:21 +0100
+
+psad (0.9.9-6) unstable; urgency=low
+
+  * changes short description psad: s/post/port/.  (Closes: #164560)
+
+ -- Daniel Gubser <daniel.gubser@gutreu.ch>  Thu, 24 Oct 2002 06:34:23 +0200
+
+psad (0.9.9-5) unstable; urgency=low
+
+  * Closes: #164560 psad: s/post/port/ in short description
+
+ -- Daniel Gubser <daniel.gubser@gutreu.ch>  Sun, 20 Oct 2002 13:03:19 +0200
+
+psad (0.9.9-4) unstable; urgency=low
+
+  * cleaned up the initd file so it will stop properly
+
+ -- Daniel Gubser <daniel.gubser@gutreu.ch>  Fri, 27 Sep 2002 16:12:05 +0200
+
+psad (0.9.9-3) unstable; urgency=low
+
+  * Added a conflict line with previous versions of Bastille.
+
+ -- Javier Fernandez-Sanguino Pen~a <jfs@computer.org>  Mon,  2 Sep 2002 13:44:50 +0200
+
+psad (0.9.9-2) unstable; urgency=low
+
+  * Fixed the package to remove lintian warnings (remember: bugs
+  need to be file against the missing manpages)
+  * Changed the information on coments on the debian/rules (removed
+  debhelper's default)
+  * Reformated the debian/control file for easier reading.
+  * Removed configure-stamp from debian/rules.
+  * Added /var/run to debian/dirs.
+  * Removed debhelper examples
+  * Changed the manpage regarding changes to syslog.
+  * Changed the initd file so that it checks if the changes to syslog.conf
+  have been done.
+  * Removed (commented out) the changes to syslog.conf since they are
+  against policy.
+
+ -- Javier Fernandez-Sanguino Pen~a <jfs@computer.org>  Tue, 20 Aug 2002 21:21:32 +0200
+
+psad (0.9.9-1) unstable; urgency=low
+
+  * Initial Release.
+  * This is my first Debian package.
+
+ -- Daniel Gubser <daniel.gubser@gutreu.ch>  Wed, 14 Aug 2002 13:34:17 +0200
+

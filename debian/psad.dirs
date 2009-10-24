@@ -1,0 +1,6 @@
+usr/bin
+usr/sbin
+var/log/psad
+var/lib/psad
+etc/psad
+etc/psad/snort_rules

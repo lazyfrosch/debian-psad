@@ -1,0 +1,3 @@
+version=3
+ 
+http://www.cipherdyne.com/psad/download/psad-nodeps-(.*)\.tar\.gz debian uupdate

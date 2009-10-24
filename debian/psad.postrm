@@ -1,0 +1,35 @@
+#!/bin/sh
+
+set -e
+
+# In case the user want to purge all files of the psad package, we must remove
+# manually pid, fifo and log files before the main directories are removed.
+if [ "$1" = "purge" ]; then
+ 
+    # Handle the /var/run/psad directory that contains pid and socket files
+    if [ -d /var/run/psad ];then
+        find /var/run/psad/ -type f -exec rm {} \;
+        find /var/run/psad/ -type s -exec rm {} \;
+    fi
+
+    # Clean the config directory /etc/psad
+    if [ -d /etc/psad/archive ]; then
+        find /etc/psad/archive/ -type f -exec rm {} \;
+        rmdir /etc/psad/archive
+    fi
+
+    # Remove the fifo file which psad creates
+    if [ -d /var/lib/psad ]; then
+        find /var/lib/psad -type p -exec rm {} \;
+    fi
+
+    # Handle the /var/log/psad directory that contains log files 
+    if [ -d /var/log/psad ]; then
+        rm -rf /var/log/psad/*
+    fi
+ 
+fi
+
+#DEBHELPER#
+
+exit 0

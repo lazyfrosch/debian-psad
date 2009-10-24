@@ -1,0 +1,33 @@
+From: Franck Joncourt <franck.mail@dthconnex.com>
+Subject: [PATCH] fixes/build
+
+Allow the Makefile to handle options from the command-line so that we can
+honour the DEB_BUILD_OPTIONS.
+
+Signed-off-by: Franck Joncourt <franck.mail@dthconnex.com>
+
+---
+ Makefile |    6 ++++--
+ 1 files changed, 4 insertions(+), 2 deletions(-)
+
+diff --git a/Makefile b/Makefile
+index 245e63c..bc7cbe5 100644
+--- a/Makefile
++++ b/Makefile
+@@ -26,10 +26,12 @@
+ #  $Id: Makefile 1517 2006-01-07 02:25:10Z mbr $
+ #
+ 
++OPTS = -Wall -O
++
+ ### default
+ all : kmsgsd.c psadwatchd.c psad_funcs.c strlcpy.c strlcat.c psad.h
+-	/usr/bin/gcc -Wall -O kmsgsd.c psad_funcs.c strlcpy.c strlcat.c -o kmsgsd
+-	/usr/bin/gcc -Wall -O psadwatchd.c psad_funcs.c strlcpy.c strlcat.c -o psadwatchd
++	/usr/bin/gcc $(OPTS) kmsgsd.c psad_funcs.c strlcpy.c strlcat.c -o kmsgsd
++	/usr/bin/gcc $(OPTS) psadwatchd.c psad_funcs.c strlcpy.c strlcat.c -o psadwatchd
+ 
+ ### debug mode
+ debug : kmsgsd.c psadwatchd.c psad_funcs.c strlcpy.c strlcat.c psad.h
+-- 
+tg: (746e50e..) fixes/build (depends on: upstream)

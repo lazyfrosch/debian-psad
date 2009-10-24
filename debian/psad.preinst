@@ -1,0 +1,37 @@
+#!/bin/sh
+
+# This script is only intended to fix bug #497574.
+# We check for an upgrade from Psad older than 2.1.5 and remove the old
+# Psad process if needed.
+#
+# NB: As some commands can return an exit code other than 0 we do not use
+# *set -e* at the beginning.
+
+if [ "$1" = "upgrade" ]; then
+
+    status=1;
+    if [ -x "`which dpkg 2>/dev/null`" ]; then 
+        dpkg --compare-versions 2.1.5 gt $2
+        status=$?
+    fi
+
+    if [ $status = 0 ]; then
+
+        echo -n "Removing old Psad process ... "
+
+        process_list="psadwatchd kmsgsd psad"
+        for process in $process_list; do
+	    pkill $process 2>/dev/null
+        done
+
+        echo "Done."
+
+    fi
+
+fi
+
+set -e
+
+#DEBHELPER#
+
+exit 0
