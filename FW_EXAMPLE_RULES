@@ -1,0 +1,31 @@
+
+The following firewall rulesets are examples of rulesets that are compatible
+with psad.  Basically, the only criteria is have the firewall log and
+drop packets that should not be allowed through.  Then a port scan will
+manifest itself within /var/log/messages as packets are dropped and logged,
+at which time these messages will be written to the /var/lib/psad/psadfifo
+named pipe and analyzed by psad.
+
+
+### iptables:
+
+Chain INPUT (policy ACCEPT)
+target     prot opt source               destination
+ACCEPT     all  --  0.0.0.0/0            0.0.0.0/0          state RELATED,ESTABLISHED
+ACCEPT     tcp  --  129.xx.xx.xx         64.44.21.15        tcp dpt:22 flags:SYN,RST,ACK/SYN
+ACCEPT     tcp  --  208.xx.xx.xx         64.44.21.15        tcp dpt:22 flags:SYN,RST,ACK/SYN
+ACCEPT     tcp  --  24.xx.xx.xx          64.44.21.15        tcp dpt:22 flags:SYN,RST,ACK/SYN
+ACCEPT     tcp  --  208.xx.xx.xx         64.44.21.15        tcp dpt:22 flags:SYN,RST,ACK/SYN
+ACCEPT     tcp  --  0.0.0.0/0            64.44.21.15        tcp dpt:25 flags:SYN,RST,ACK/SYN
+ACCEPT     tcp  --  0.0.0.0/0            64.44.21.15        tcp dpt:80 flags:SYN,RST,ACK/SYN
+LOG        all  --  0.0.0.0/0            0.0.0.0/0          LOG level warning prefix `DROP '
+DROP       all  --  0.0.0.0/0            0.0.0.0/0
+
+Chain FORWARD (policy ACCEPT)
+target     prot opt source               destination
+ACCEPT     all  --  0.0.0.0/0            0.0.0.0/0          state RELATED,ESTABLISHED
+LOG        all  --  0.0.0.0/0            0.0.0.0/0          LOG level warning prefix `DROP '
+DROP       all  --  0.0.0.0/0            0.0.0.0/0
+
+Chain OUTPUT (policy ACCEPT)
+target     prot opt source               destination

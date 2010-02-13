@@ -1,0 +1,31 @@
+.\"
+.TH KMSGSD 8 "November 2002" "Debian/GNU Linux"
+.SH NAME
+.B kmsgsd
+\- separates iptables messages from all other kernel messages.
+.SH SYNOPSIS
+.B kmsgsd
+.SH DESCRIPTION
+.B kmsgsd
+reads messages from the /var/lib/psad/psadfifo named pipe and prints any firewall
+related log messages to the psad data file "/var/log/psad/fwdata".
+.B psad
+cannot detect port scans or other suspect traffic without kmsgsd running on
+the machine.
+.B kmsgsd
+uses the psad.conf configuration file which by default is
+located at /etc/psad/psad.conf, but a different path can be specified
+on the command line.
+.SH SEE ALSO
+.BR psad (8),
+.BR psadwatchd (8),
+.SH AUTHOR
+Michael Rash (mbr@cipherdyne.org)
+
+This manual page was written by Daniel Gubser <daniel.gubser@gutreu.ch>
+for the Debian GNU/Linux system (but may be used by others).
+.SH DISTRIBUTION
+.B psad
+is distributed under the GNU General Public License (GPL), and the latest
+version may be downloaded from
+.B http://www.cipherdyne.org

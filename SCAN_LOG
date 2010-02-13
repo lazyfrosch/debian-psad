@@ -1,0 +1,59 @@
+
+This file contains a sample psad alert, and many more examples can be found
+here:
+
+http://www.cipherdyne.org/psad/docs/
+
+
+Here is an example of psad alert (version 2.0.2) for a scan for the
+Microsoft VNC service against my Linux box (running kernel 2.6.18):
+
+=-=-=-=-=-=-=-=-=-=-=-= Fri Dec 22 12:10:38 2006 =-=-=-=-=-=-=-=-=-=-=-=
+
+
+         Danger level: [2] (out of 5)
+
+    Scanned tcp ports: [5900: 1 packets]
+            tcp flags: [SYN: 1 packets, Nmap: -sT or -sS]
+      Netfilter chain: INPUT (prefix "DROP"), 1 packets
+
+               Source: 71.127.83.44
+                  DNS: static-71-127-83-44.aubnin.fios.verizon.net
+
+          Destination: 71.127.x.x
+
+      Syslog hostname: minastirith
+
+     Current interval: Fri Dec 22 12:10:33 2006 (start)
+                       Fri Dec 22 12:10:38 2006 (end)
+
+   Overall scan start: Thu Dec 21 20:37:49 2006
+   Total email alerts: 36
+   Complete tcp range: [1433-5900]
+
+   chain:   interface:   tcp:   udp:   icmp:
+   INPUT    eth0         44     0      0
+
+
+[+] tcp scan signatures:
+
+   "MISC VNC communication attempt"
+       dst port:  5900 (no server bound to local port)
+       flags:     SYN
+       psad_id:   100202
+       chain:     INPUT
+       packets:   1
+       classtype: attempted-admin
+       reference: (url) http://isc.sans.org/port_details.php?port=5900
+       reference: (url) http://secunia.com/advisories/20107
+
+[+] Whois Information:
+Verizon Internet Services Inc. VIS-71-96 (NET-71-96-0-0-1)
+                                  71.96.0.0 - 71.127.255.255
+PORTAL MAGIC FTTP (NET-71-127-83-40-1)
+                                  71.127.83.40 - 71.127.83.47
+
+# ARIN WHOIS database, last updated 2006-12-21 19:10
+# Enter ? for additional hints on searching ARIN's WHOIS database.
+
+=-=-=-=-=-=-=-=-=-=-=-= Fri Dec 22 12:10:38 2006 =-=-=-=-=-=-=-=-=-=-=-=

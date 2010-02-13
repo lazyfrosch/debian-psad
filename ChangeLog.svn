@@ -1,0 +1,170 @@
+------------------------------------------------------------------------
+r2255 | mbr | 2009-02-20 23:38:59 -0500 (Fri, 20 Feb 2009) | 1 line
+Changed paths:
+   M /psad/branches/psad-2.1.5/CREDITS
+
+added Miroslav Grepl
+------------------------------------------------------------------------
+r2254 | mbr | 2009-02-20 23:30:37 -0500 (Fri, 20 Feb 2009) | 1 line
+Changed paths:
+   A /psad/branches/psad-2.1.5 (from /psad/trunk:2253)
+
+created psad-2.1.5 branch
+------------------------------------------------------------------------
+r2253 | mbr | 2009-02-20 23:29:50 -0500 (Fri, 20 Feb 2009) | 1 line
+Changed paths:
+   M /psad/trunk/ChangeLog
+   M /psad/trunk/VERSION
+   M /psad/trunk/nf2csv
+   M /psad/trunk/packaging/psad-nodeps.spec
+   M /psad/trunk/packaging/psad.spec
+   M /psad/trunk/psad
+
+psad-2.1.5 release
+------------------------------------------------------------------------
+r2252 | mbr | 2009-02-20 23:25:42 -0500 (Fri, 20 Feb 2009) | 3 lines
+Changed paths:
+   M /psad/trunk/ChangeLog
+   M /psad/trunk/deps/IPTables-ChainMgr/Changes
+   M /psad/trunk/deps/IPTables-ChainMgr/Makefile.PL
+   M /psad/trunk/deps/IPTables-ChainMgr/README
+   M /psad/trunk/deps/IPTables-ChainMgr/VERSION
+   M /psad/trunk/deps/IPTables-ChainMgr/lib/IPTables/ChainMgr.pm
+   M /psad/trunk/deps/IPTables-Parse/Changes
+   M /psad/trunk/deps/IPTables-Parse/VERSION
+   M /psad/trunk/deps/IPTables-Parse/lib/IPTables/Parse.pm
+
+- Updated IPTables::Parse to 0.7.
+- Updated IPTables::ChainMgr to 0.9.
+
+------------------------------------------------------------------------
+r2251 | mbr | 2009-02-20 23:22:05 -0500 (Fri, 20 Feb 2009) | 5 lines
+Changed paths:
+   M /psad/trunk/ChangeLog
+   M /psad/trunk/psad
+
+- Bug fix when ENABLE_SYSLOG_FILE is enabled to run a preliminary regex
+match on each syslog message because kmsgsd is not running and therefore
+has not gone through the kmsgsd tests for a properly structured iptables
+message.
+
+------------------------------------------------------------------------
+r2250 | mbr | 2009-02-20 21:44:49 -0500 (Fri, 20 Feb 2009) | 1 line
+Changed paths:
+   M /psad/trunk/ChangeLog
+
+minor wording update for SELinux policy path
+------------------------------------------------------------------------
+r2249 | mbr | 2009-01-24 16:42:40 -0500 (Sat, 24 Jan 2009) | 2 lines
+Changed paths:
+   M /psad/trunk/ChangeLog
+   A /psad/trunk/selinux
+   A /psad/trunk/selinux/README
+   A /psad/trunk/selinux/psad.fc
+   A /psad/trunk/selinux/psad.if
+   A /psad/trunk/selinux/psad.te
+
+(Miroslav Grepl) Contributed policy file to make psad compatible with SELinux.
+
+------------------------------------------------------------------------
+r2248 | mbr | 2009-01-24 16:38:35 -0500 (Sat, 24 Jan 2009) | 1 line
+Changed paths:
+   M /psad/trunk/psad.8
+
+updated man page to remove confusing tab chars in syslog.conf psadfifo line
+------------------------------------------------------------------------
+r2247 | mbr | 2008-10-26 18:58:35 -0400 (Sun, 26 Oct 2008) | 1 line
+Changed paths:
+   M /psad/trunk/psad.conf
+
+minor comment update to psad.conf
+------------------------------------------------------------------------
+r2245 | mbr | 2008-10-14 07:43:06 -0400 (Tue, 14 Oct 2008) | 1 line
+Changed paths:
+   M /psad/trunk/VERSION
+   M /psad/trunk/nf2csv
+   M /psad/trunk/psad
+
+version 2.1.5-pre3
+------------------------------------------------------------------------
+r2244 | mbr | 2008-10-14 07:42:43 -0400 (Tue, 14 Oct 2008) | 3 lines
+Changed paths:
+   M /psad/trunk/CREDITS
+   M /psad/trunk/ChangeLog
+   M /psad/trunk/psad
+
+- Bug fix for local server ports not reported correctly under netstat
+parsing (Franck Joncourt).
+
+------------------------------------------------------------------------
+r2243 | mbr | 2008-08-31 09:46:47 -0400 (Sun, 31 Aug 2008) | 1 line
+Changed paths:
+   M /psad/trunk/fwcheck_psad.pl
+
+added check for the 'auto' directory in order to import all appropriate perl module directories
+------------------------------------------------------------------------
+r2242 | mbr | 2008-08-31 09:45:23 -0400 (Sun, 31 Aug 2008) | 1 line
+Changed paths:
+   M /psad/trunk/CREDITS
+   M /psad/trunk/fwcheck_psad.pl
+
+Applied patch from Franck Joncourt to fix missing check for the 'mail' command
+------------------------------------------------------------------------
+r2240 | mbr | 2008-08-29 00:13:04 -0400 (Fri, 29 Aug 2008) | 1 line
+Changed paths:
+   M /psad/trunk/VERSION
+   M /psad/trunk/nf2csv
+   M /psad/trunk/psad
+
+bumped version to 2.1.5-pre2
+------------------------------------------------------------------------
+r2239 | mbr | 2008-08-29 00:11:50 -0400 (Fri, 29 Aug 2008) | 1 line
+Changed paths:
+   M /psad/trunk/nf2csv.1
+
+dash fixes from Franck
+------------------------------------------------------------------------
+r2238 | mbr | 2008-08-29 00:09:32 -0400 (Fri, 29 Aug 2008) | 1 line
+Changed paths:
+   M /psad/trunk/CREDITS
+   M /psad/trunk/psad.8
+
+dash fixes from Franck
+------------------------------------------------------------------------
+r2237 | mbr | 2008-08-29 00:06:20 -0400 (Fri, 29 Aug 2008) | 1 line
+Changed paths:
+   A /psad/trunk/fwcheck_psad.8
+
+added fwcheck_psad.8 file
+------------------------------------------------------------------------
+r2235 | mbr | 2008-08-26 20:08:56 -0400 (Tue, 26 Aug 2008) | 1 line
+Changed paths:
+   M /psad/trunk/VERSION
+   M /psad/trunk/nf2csv
+   M /psad/trunk/psad
+
+bumped version to 2.1.5-pre1
+------------------------------------------------------------------------
+r2234 | mbr | 2008-08-26 20:08:36 -0400 (Tue, 26 Aug 2008) | 4 lines
+Changed paths:
+   M /psad/trunk/CREDITS
+   M /psad/trunk/ChangeLog
+   M /psad/trunk/init-scripts/psad-init.gentoo
+
+- (Steve B) Submitted patch to fix a bug in the start() function in the
+Gentoo init script which caused psad to not be started and the error
+"* ERROR: psad failed to start" to be generated.
+
+------------------------------------------------------------------------
+r2233 | mbr | 2008-08-26 20:08:17 -0400 (Tue, 26 Aug 2008) | 1 line
+Changed paths:
+   M /psad/trunk/psad
+
+applied 'auto' heuristic from the fwknop project for finding perl module import subdirectories
+------------------------------------------------------------------------
+r2232 | mbr | 2008-08-21 23:48:43 -0400 (Thu, 21 Aug 2008) | 1 line
+Changed paths:
+   M /psad/trunk/CREDITS
+
+added deps/ blurb for Franck
+------------------------------------------------------------------------
