@@ -5,6 +5,8 @@ Maintainer: Franck Joncourt <franck@debian.org>
 Uploaders: Daniel Gubser <guterm@debian.org>
 Build-Depends: debhelper (>= 7)
 Standards-Version: 3.8.4
+Vcs-git: git://git.debian.org/git/collab-maint/psad.git
+Vcs-Browser: http://git.debian.org/?p=collab-maint/psad.git;a=summary
 
 HomePage: http://www.cipherdyne.org/psad/
 Package: psad

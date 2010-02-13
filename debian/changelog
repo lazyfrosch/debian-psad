@@ -6,6 +6,7 @@ psad (2.1.5-3) UNRELEASED; urgency=low
     + Remved BD on quilt.
     + Removed quilt framework from d.rules.
   * Bumped up Standards-Version to 3.8.4 (no changes).
+  * Added Vcs fields in d.control.
 
  -- Franck Joncourt <franck@debian.org>  Sat, 13 Feb 2010 20:10:12 +0100
 
