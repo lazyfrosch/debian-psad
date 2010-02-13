@@ -6,9 +6,9 @@ Uploaders: Daniel Gubser <guterm@debian.org>
 Build-Depends: debhelper (>= 7)
 Standards-Version: 3.8.4
 Vcs-git: git://git.debian.org/git/collab-maint/psad.git
-Vcs-Browser: http://git.debian.org/?p=collab-maint/psad.git;a=summary
+Vcs-Browser: http://git.debian.org/?p=collab-maint/psad.git
 
-HomePage: http://www.cipherdyne.org/psad/
+Homepage: http://www.cipherdyne.org/psad/
 Package: psad
 Architecture: any
 Depends: ${misc:Depends}, ${shlibs:Depends}, ${perl:Depends},
@@ -19,23 +19,19 @@ Depends: ${misc:Depends}, ${shlibs:Depends}, ${perl:Depends},
 Recommends: bastille
 Suggests: fwsnort
 Conflicts: bastille (<< 1:1.3.0-4)
-Description: The Port Scan Attack Detector
- PSAD is a collection of four lightweight system daemons written in 
- Perl and in C that is designed to work with Linux firewalling code
- (iptables in the 2.4.x kernels, and ipchains in the 2.2.x kernels)
- to detect port scans. It features a set of highly configurable danger
- thresholds (with sensible defaults provided), verbose alert messages
- that include the source, destination, scanned port range, begin and 
- end times, tcp flags and corresponding nmap options (Linux 2.4.x 
- kernels only), reverse DNS info, email alerting, and automatic 
- blocking of offending ip addresses via dynamic configuration of 
- ipchains/iptables firewall rulesets.  
+Description: Port Scan Attack Detector
+ PSAD is a collection of four lightweight system daemons (in Perl and
+ C) designed to work with iptables to detect port scans. It features:
+  * a set of highly configurable danger thresholds (with sensible
+    defaults provided);
+  * verbose alert messages that include the source, destination,
+    scanned port range, beginning and end times, TCP flags, and
+    corresponding Nmap options;
+  * reverse DNS information;
+  * alerts via email;
+  * automatic blocking of offending IP addresses via dynamic firewall
+    configuration.
  .
- In addition, for the 2.4.x kernels psad incorporates many
- of the tcp signatures included in Snort to detect highly suspect scans
- for:
- .
-  * various backdoor programs (e.g. EvilFTP, GirlFriend, SubSeven)
-  * DDoS tools (mstream, shaft)
-  * advanced port scans (syn, fin, xmas) such as those made with nmap
- . 
+ When combined with fwsnort and the iptables string match extension,
+ PSAD is capable of detecting many attacks described in the Snort rule
+ set that involve application layer data.
