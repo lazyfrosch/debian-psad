@@ -1,7 +1,5 @@
 #!/usr/bin/make -f
 
-include /usr/share/quilt/quilt.make
-
 INSTALL         = install
 INSTALL_PROGRAM = $(INSTALL)
 INSTALL_DATA    = $(INSTALL) -m 644
@@ -20,12 +18,12 @@ else
 endif
 
 build: build-stamp
-build-stamp: $(QUILT_STAMPFN)
+build-stamp:
 	dh_testdir
 	make all OPTS="$(CFLAGS)"
 	touch $@ 
 
-clean: unpatch
+clean:
 	dh_testdir
 	dh_testroot
 	$(MAKE) clean

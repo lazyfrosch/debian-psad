@@ -1,9 +1,9 @@
 Source: psad
 Section: admin
 Priority: optional
-Maintainer: Daniel Gubser <guterm@debian.org>
-Uploaders: Franck Joncourt <franck.mail@dthconnex.com>
-Build-Depends: debhelper (>= 7), quilt
+Maintainer: Franck Joncourt <franck@debian.org>
+Uploaders: Daniel Gubser <guterm@debian.org>
+Build-Depends: debhelper (>= 7)
 Standards-Version: 3.8.3
 
 HomePage: http://www.cipherdyne.org/psad/

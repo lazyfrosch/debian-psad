@@ -1,3 +1,13 @@
+psad (2.1.5-3) UNRELEASED; urgency=low
+
+  * Set /me as main maintainer.
+  * Switch to dpkg-source 3.0 (quilt) format:
+    + Removed useless README.source which only documented quilt usage.
+    + Remved BD on quilt.
+    + Removed quilt framework from d.rules.
+
+ -- Franck Joncourt <franck@debian.org>  Sat, 13 Feb 2010 20:10:12 +0100
+
 psad (2.1.5-2) unstable; urgency=low
 
   * Added a dependency on bsd-mailx | mailx | mailutils package to provide the
