@@ -11,6 +11,8 @@ psad (2.1.5-3) UNRELEASED; urgency=low
   * Added patch fixes_spelling.diff to fix spelling errors in the manpages.
   * Added dependency against lsb-base (>= 3.0-6) to ensure the
     /lib/lsb/init-functions can be sourced through the initscript.
+  * Refreshed d.watch so that we do not use uupdate anymore, since it is
+    useless with my workflow.
 
  -- Franck Joncourt <franck@debian.org>  Sat, 13 Feb 2010 20:10:12 +0100
 
