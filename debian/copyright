@@ -1,13 +1,69 @@
-This package was debianized by Daniel Gubser <guterm@debian.org> on
-Wed, 14 Aug 2002 13:34:17 +0200.
+Format-Specification: http://svn.debian.org/wsvn/dep/web/deps/dep5.mdwn?op=file&rev=135
+Maintainer: Michael B. Rash <mbr@cipherdyne.com>
+Name: Psad
+Source: http://www.cipherdyne.org/psad/download
 
-It was downloaded from http://www.cipherdyne.org/psad/download
+Files: *
+Copyright: 1999-2009, Michael B. Rash <mbr@cipherdyne.com>
+License: GPL-2+
 
-Upstream Author: Michael B. Rash <mbr@cipherdyne.com>
+Files: logrotate.psad
+Copyright: 2006, Albert Whale, ABS Computer Technology, Inc
+License: GPL-2+
 
-Copyright:
+Files: packaging/psad.ebuild
+Copyright: 1999-2006 Gentoo Foundation
+License: GPL-2+
 
-    Copyright (C) by 2008 Michael B. Rash
+Files: pf.os
+Copyright: Copyright 2000-2003 by Michal Zalewski <lcamtuf@coredump.cx>
+ Copyright 2003 by Mike Frantzen <frantzen@w4g.org>
+License: other
+ Permission to use, copy, modify, and distribute this software for any
+ purpose with or without fee is hereby granted, provided that the above
+ copyright notice and this permission notice appear in all copies.
+ .
+ THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+ WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+ MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+ ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+ WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+ ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+ OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
-This software is distributed under the GNU GPL license, you can find
-a copy of it in your Debian system under /usr/share/common-licenses/
+Files: strlcpy.c, strlcat.c
+Copyright: 1998 Todd C. Miller <Todd.Miller@courtesan.com>
+License: other
+ Redistribution and use in source and binary forms, with or without
+ modification, are permitted provided that the following conditions
+ are met:
+   1. Redistributions of source code must retain the above copyright
+      notice, this list of conditions and the following disclaimer.
+   2. Redistributions in binary form must reproduce the above copyright
+      notice, this list of conditions and the following disclaimer in the
+      documentation and/or other materials provided with the distribution.
+   3. The name of the author may not be used to endorse or promote products
+      derived from this software without specific prior written permission.
+ .
+ THIS SOFTWARE IS PROVIDED ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES,
+ INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY
+ AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL
+ THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
+ EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+ PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS;
+ OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+ WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
+ OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
+ ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+Files: debian/*
+Copyright: 2002-2010, Daniel Gubser <guterm@debian.org>
+ 2009-2010, Franck Joncourt <franck@debian.org>
+License: GPL-2+
+
+License: GPL-2+
+ This program is free software; you can redistribute it and/or modify
+ it under the terms of the GNU General Public License as published by
+ the Free Software Foundation; either version 2 of the License, or
+ (at your option) any later version. You can find a copy of it in your
+ Debian system under /usr/share/common-licenses/

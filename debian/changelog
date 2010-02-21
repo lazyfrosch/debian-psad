@@ -13,6 +13,7 @@ psad (2.1.5-3) UNRELEASED; urgency=low
     /lib/lsb/init-functions can be sourced through the initscript.
   * Refreshed d.watch so that we do not use uupdate anymore, since it is
     useless with my workflow.
+  * Refreshed d.copyright following DEP5 guideline.
 
  -- Franck Joncourt <franck@debian.org>  Sat, 13 Feb 2010 20:10:12 +0100
 
