@@ -39,8 +39,8 @@ index 090734f..0a44175 100644
 +++ b/psadwatchd.8
 @@ -1,5 +1,5 @@
  .\"
--.TH PSADWATCHD 28 "March 2009" "Debian/GNU Linux"
-+.TH PSADWATCHD 28 "March 2009" "Debian GNU/Linux"
+-.TH PSADWATCHD 8 "November 2002" "Debian/GNU Linux"
++.TH PSADWATCHD 8 "November 2002" "Debian GNU/Linux"
  .SH NAME
  .B psadwatchd
  \- checks to make sure kmsgsd and psad are running.
