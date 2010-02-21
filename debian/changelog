@@ -8,6 +8,7 @@ psad (2.1.5-3) UNRELEASED; urgency=low
   * Bumped up Standards-Version to 3.8.4 (no changes).
   * Added Vcs fields in d.control.
   * Refreshed long description with patch from Justin B Rye. (Closes: #567897)
+  * Added patch fixes_spelling.diff to fix spelling errors in the manpages.
 
  -- Franck Joncourt <franck@debian.org>  Sat, 13 Feb 2010 20:10:12 +0100
 

@@ -1,10 +1,10 @@
-From: Franck Joncourt <franck.mail@dthconnex.com>
+From: Franck Joncourt <franck@debian.org>
 Subject: [PATCH] fixes/build
 
 Allow the Makefile to handle options from the command-line so that we can
 honour the DEB_BUILD_OPTIONS.
 
-Signed-off-by: Franck Joncourt <franck.mail@dthconnex.com>
+Signed-off-by: Franck Joncourt <franck@debian.org>
 
 ---
  Makefile |    6 ++++--

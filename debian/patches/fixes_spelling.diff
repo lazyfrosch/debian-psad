@@ -1,0 +1,48 @@
+From: Franck Joncourt <franck@debian.org>
+Subject: [PATCH] t/upstream/spelling
+
+This patch fixes spelling errors in some manpages.
+
+Signed-off-by: Franck Joncourt <franck@debian.org>
+
+---
+ fwcheck_psad.8 |    2 +-
+ kmsgsd.8       |    2 +-
+ psadwatchd.8   |    2 +-
+ 3 files changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/fwcheck_psad.8 b/fwcheck_psad.8
+index d3d075c..f1911fa 100644
+--- a/fwcheck_psad.8
++++ b/fwcheck_psad.8
+@@ -1,5 +1,5 @@
+ .\"
+-.TH FWCHECK_PSAD 8 "Aug, 2008" "Debian/GNU Linux"
++.TH FWCHECK_PSAD 8 "Aug, 2008" "Debian GNU/Linux"
+ .SH NAME
+ .B fwcheck_psad
+ \- look for iptables rules that log and block unwanted packets.
+diff --git a/kmsgsd.8 b/kmsgsd.8
+index 8963572..5804aa5 100644
+--- a/kmsgsd.8
++++ b/kmsgsd.8
+@@ -1,5 +1,5 @@
+ .\"
+-.TH KMSGSD 8 "November 2002" "Debian/GNU Linux"
++.TH KMSGSD 8 "November 2002" "Debian GNU/Linux"
+ .SH NAME
+ .B kmsgsd
+ \- separates iptables messages from all other kernel messages.
+diff --git a/psadwatchd.8 b/psadwatchd.8
+index 090734f..0a44175 100644
+--- a/psadwatchd.8
++++ b/psadwatchd.8
+@@ -1,5 +1,5 @@
+ .\"
+-.TH PSADWATCHD 28 "March 2009" "Debian/GNU Linux"
++.TH PSADWATCHD 28 "March 2009" "Debian GNU/Linux"
+ .SH NAME
+ .B psadwatchd
+ \- checks to make sure kmsgsd and psad are running.
+-- 
+tg: (226d49d..) t/upstream/spelling (depends on: upstream)
