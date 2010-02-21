@@ -9,6 +9,8 @@ psad (2.1.5-3) UNRELEASED; urgency=low
   * Added Vcs fields in d.control.
   * Refreshed long description with patch from Justin B Rye. (Closes: #567897)
   * Added patch fixes_spelling.diff to fix spelling errors in the manpages.
+  * Added dependency against lsb-base (>= 3.0-6) to ensure the
+    /lib/lsb/init-functions can be sourced through the initscript.
 
  -- Franck Joncourt <franck@debian.org>  Sat, 13 Feb 2010 20:10:12 +0100
 
