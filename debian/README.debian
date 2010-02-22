@@ -1,12 +1,5 @@
-auto_dl
-
-If you are using free services like proxyscan.freenode.net
-to test your network config you can let psad ignore this scans by
-uncommenting the line in /etc/psad/auto_dl.
-
 TODO
 
-- needs probably configuration (with debconf?) to work properly
-- check if it works with Bastille (also any new versions)
+ + check if it works with Bastille (also any new versions)
 
  -- Daniel Gubser <guterm@debian.org>  Tue January 27 06:22:12 CET 2004

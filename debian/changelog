@@ -14,6 +14,10 @@ psad (2.1.5-3) UNRELEASED; urgency=low
   * Refreshed d.watch so that we do not use uupdate anymore, since it is
     useless with my workflow.
   * Refreshed d.copyright following DEP5 guideline.
+  * Refreshed d.psad.docs:
+    + Removed README.SYSLOG from the docs since psad do not use the fwdata
+      file anymore.
+    + Removed duplicate entry for FW_HELP.
 
  -- Franck Joncourt <franck@debian.org>  Sat, 13 Feb 2010 20:10:12 +0100
 
