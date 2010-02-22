@@ -1,4 +1,4 @@
-psad (2.1.5-3) UNRELEASED; urgency=low
+psad (2.1.5-3) unstable; urgency=low
 
   * Set /me as main maintainer.
   * Switch to dpkg-source 3.0 (quilt) format:
