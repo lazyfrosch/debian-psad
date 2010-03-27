@@ -1,3 +1,9 @@
+psad (2.1.5-3~bpo50+1) lenny-backports; urgency=low
+
+  * Rebuild for lenny-backports.
+
+ -- Franck Joncourt <franck@debian.org>  Sat, 27 Mar 2010 19:31:54 +0100
+
 psad (2.1.5-3) unstable; urgency=low
 
   * Set /me as main maintainer.
