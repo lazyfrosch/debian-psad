@@ -15,7 +15,7 @@ Depends: ${misc:Depends}, ${shlibs:Depends}, ${perl:Depends},
  libunix-syslog-perl, iptables, rsyslog | system-log-daemon,
  libnetwork-ipv4addr-perl, libdate-calc-perl, libcarp-clan-perl,
  whois, psmisc, libiptables-parse-perl, libiptables-chainmgr-perl,
- exim4 | mail-transport-agent, bsd-mailx | mailx | mailutils,
+ default-mta | mail-transport-agent, bsd-mailx | mailx | mailutils,
  lsb-base (>= 3.0-6)
 Recommends: bastille
 Suggests: fwsnort
