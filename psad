@@ -4,7 +4,7 @@
 #
 # File: psad (/usr/sbin/psad)
 #
-# URL: http://www.cipherdyne.org/psad
+# URL: http://www.cipherdyne.org/psad/
 #
 # Purpose: psad makes use of iptables logs to detect port scans,
 #          probes for backdoors and DDoS tools, and other suspect traffic
@@ -20,9 +20,11 @@
 #
 # Credits: (see the CREDITS file bundled with the psad sources.)
 #
-# Version: 2.1.5
+# Version: 2.1.6
 #
-# Copyright (C) 1999-2007 Michael Rash (mbr@cipherdyne.org)
+# Copyright (C) 1999-2009 Michael Rash (mbr@cipherdyne.org)
+#
+# Reference: Snort is a registered trademark of Sourcefire, Inc.
 #
 # License (GNU Public License):
 #
@@ -126,7 +128,7 @@
 #
 ###############################################################################
 #
-# $Id: psad 2253 2009-02-21 04:29:50Z mbr $
+# $Id: psad 2286 2010-07-08 11:47:19Z mbr $
 #
 
 ### modules used by psad
@@ -143,8 +145,8 @@ use strict;
 ### ========================== main =================================
 
 ### set the current psad version and file revision numbers
-my $version = '2.1.5';
-my $revision_svn = '$Revision: 2253 $';
+my $version = '2.1.6';
+my $revision_svn = '$Revision: 2286 $';
 my $rev_num = '1';
 ($rev_num) = $revision_svn =~ m|\$Rev.*:\s+(\S+)|;
 
@@ -168,6 +170,7 @@ my @ipt_config = ();
 
 ### main configuration hash
 my %config = ();
+my $override_config_str = '';
 
 ### local subnets
 my @local_nets = ();
@@ -611,6 +614,7 @@ $< == 0 && $> == 0 or
 unless ($no_daemon or $debug) {
     my $pid = fork();
     exit 0 if $pid;
+    close STDIN; close STDOUT; close STDERR;
     die "[*] $0: Couldn't fork: $!" unless defined $pid;
     POSIX::setsid() or die "[*] $0: Can't start a new session: $!";
 }
@@ -630,11 +634,17 @@ unless ($no_daemon or $debug) {
 ### we're at it, start psadwatchd as well.  Note that this is the best
 ### place to start the other daemons since we just wrote the psad pid
 ### to PID_FILE above.
+my $cmd;
 unless ($config{'ENABLE_SYSLOG_FILE'} eq 'Y'
         or $no_kmsgsd
         or $config{'SYSLOG_DAEMON'} =~ /ulog/i
         or $kmsgsd_started) {
-    system $cmds{'kmsgsd'};
+    $cmd  = $cmds{'kmsgsd'};
+    $cmd .= " -c $config_file";
+    $cmd .= " -O $override_config_str"
+        if $override_config_str;
+    open KMSGSD, "| $cmd" or die "[*] Could not execute $cmds{'kmsgsd'}";
+    close KMSGSD;
     $kmsgsd_started = 1;
 }
 
@@ -647,8 +657,15 @@ unless ($kmsgsd_started) {
     unlink $pidfiles{'kmsgsd'} if -e $pidfiles{'kmsgsd'};
 }
 
-system $cmds{'psadwatchd'}
-    unless $debug or $no_daemon;
+unless ($debug or $no_daemon) {
+    $cmd  = $cmds{'psadwatchd'};
+    $cmd .= " -c $config_file";
+    $cmd .= " -O $override_config_str"
+        if $override_config_str;
+    open PSADWATCHD, "| $cmd" or die "[*] Could not ",
+        "execute $cmds{'psadwatchd'}";
+    close PSADWATCHD;
+}
 
 if ($config{'ENABLE_AUTO_IDS'} eq 'Y') {
     ### always flush old rules (the subsequent renew_auto_blocked_ips()
@@ -1100,7 +1117,8 @@ sub check_scan() {
                 and not $analyze_mode
                 and $pkt{'dshield_str'}) {
             if ($pkt{'timestamp'} =~ /^\s*(\w+)\s+(\d+)\s+(\S+)/) {
-                my $month   = Decode_Month($1);
+                my $m_tmp = $1;  ### kludge for Decode_Month() call
+                my $month   = Decode_Month($m_tmp);
                 my $day     = sprintf("%.2d", $2);
                 my $time_24 = $3;
                 push @dshield_data, "$year-$month-$day $time_24 " .
@@ -2706,6 +2724,9 @@ sub psad_init() {
     $| = 1;
 
     $no_syslog_alerts = 1 if $analyze_mode or $status_mode;
+
+    ### import any override config files first
+    &import_override_configs() if $override_config_str;
 
     ### import psad.conf
     &import_config($config_file);
@@ -5230,7 +5251,7 @@ sub scan_logr_signatures() {
     if (@log_sigs) {
         open LS, ">> $log_sigs_file.tmp" or
             die "[*] Could not open $log_sigs_file: $!";
-        print LS "#\n# Format: <sig_time> <sid> <matches> \"<msg\" <chain> ",
+        print LS "#\n# Format: <sig_time> <sid> <matches> \"<msg>\" <chain> ",
             "<proto> <dst port> \"<flags>\" <is_fwsnort> <is_psad>\n#\n\n";
         for my $str (@log_sigs) {
             print LS $str, "\n";
@@ -6884,7 +6905,7 @@ sub gnuplot_write_plot_file() {
         $gnuplot_legend_title = '(';
         for my $tok (@$tokens_ar) {
             $gnuplot_legend_title .= "$tok,";
-        } 
+        }
         $gnuplot_legend_title =~ s/,$//;
         $gnuplot_legend_title .= ')';
         $gnuplot_legend_title  =~ s/_//g;
@@ -7161,7 +7182,7 @@ sub render_count_data() {
                     unless (defined $gnuplot_cache_uniq{$x_axis}{$y_axis}) {
                         $render_count_data{$x_axis}{$y_axis}++;
                         $gnuplot_cache_uniq{$x_axis}{$y_axis} = '';
-                    } 
+                    }
 
                 } else {
                     if ($#$aref == 2) {
@@ -7366,7 +7387,8 @@ sub gnuplot_set_start_year() {
     my $prev_month = 0;
     for (my $i=$#gnuplot_data; $i >= 0; $i--) {
         if ($gnuplot_data[$i]->[$timestamp_field] =~ /^\s*(\w+)\s+(\d+)\s+(\S+)/) {
-            my $mon  = Decode_Month($1);
+            my $m_tmp = $1;  ### kludge for Decode_Month() call
+            my $mon  = Decode_Month($m_tmp);
             my $day  = $2;
             my $time = $3;
             if ($gnuplot_year) {
@@ -7402,7 +7424,8 @@ sub gnuplot_value() {
         ### reformat timestamp (e.g. "Feb  1 00:00:27"
         ### becomes 02/02/04:03:00:17)
         if ($packet_val =~ /^\s*(\w+)\s+(\d+)\s+(\S+)/) {
-            my $mon  = Decode_Month($1);
+            my $m_tmp = $1;  ### kludge for Decode_Month() call
+            my $mon  = Decode_Month($m_tmp);
             my $day  = $2;
             my $time = $3;
             my $hour = 0;
@@ -8351,7 +8374,7 @@ sub import_ip_dirs() {
                 my @lines = <F>;
                 close F;
                 for my $line (@lines) {
-                    ### Format: <sig time> <sid> <matches> "<msg" <chain> \
+                    ### Format: <sig time> <sid> <matches> "<msg>" <chain> \
                     ### <proto> <dst port> <flags> <is_fwsnort> <is_psad>
                     ### 1165099853 249 1 "DDOS mstream client to handler" \
                     ### INPUT tcp 15104 SYN 0 0
@@ -8973,7 +8996,7 @@ sub setup() {
             }
         } else {
             &send_mail("$config{'MAIL_ERROR_PREFIX'} " .
-                "$config{'ETC_SYSLOG_CONF'} does not " .
+                "$syslog_conf does not " .
                 "exist, check SYSLOG_DAEMON setting on $config{'HOSTNAME'}",
                 '', $config{'EMAIL_ADDRESSES'}, $cmds{'mail'});
         }
@@ -9446,6 +9469,16 @@ sub archive_conf() {
     return;
 }
 
+sub import_override_configs() {
+    my @override_configs = split /,/, $override_config_str;
+    for my $file (@override_configs) {
+        die "[*] Override config file $file does not exist"
+            unless -e $file;
+        &import_config($file);
+    }
+    return;
+}
+
 sub import_config() {
     my $conf_file = shift;
 
@@ -9461,9 +9494,9 @@ sub import_config() {
             my $val     = $2;
             if ($val =~ m|/.+| && $varname =~ /^\s*(\S+)Cmd$/) {
                 ### found a command
-                $cmds{$1} = $val;
+                $cmds{$1} = $val unless defined $cmds{$1};
             } else {
-                $config{$varname} = $val;
+                $config{$varname} = $val unless defined $config{$varname};;
             }
         }
     }
@@ -9636,8 +9669,8 @@ sub write_cmd_line() {
 sub send_mail() {
     my ($subject, $body_file, $addr_str, $mailCmd) = @_;
     return if $no_email_alerts;
-    open MAIL, "| $mailCmd -s \"$subject\" $addr_str > /dev/null" or die
-        "[*] Could not send mail: $mailCmd -s \"$subject\" $addr_str: $!";
+    open MAIL, qq{| $mailCmd -s "$subject" $addr_str > /dev/null 2>&1} or die
+        qq{[*] Could not send mail: $mailCmd -s "$subject" $addr_str: $!};
     if ($body_file) {
         open F, "< $body_file" or die "[*] Could not open mail file: ",
             "$body_file: $!";
@@ -9745,6 +9778,7 @@ sub getopt_wrapper() {
         'interface=s'       => \$cmdl_interface,  # Specify the IN interface manually
                                                   #   and ignore packets on all others.
         'config=s'          => \$config_file,     # Specify path to configuration file.
+        'Override-config=s' => \$override_config_str,
         'fw-analyze'        => \$fw_analyze,      # Analyze the firewall ruleset and
                                                   #   exit.
         'fw-file=s'         => \$fw_file,         # Analyze ruleset contained within
@@ -9925,7 +9959,7 @@ Options:
                                     iptables policy.
     --fw-include-ips              - Include all IPs/nets in iptables dump
                                     (--fw-dump) output.
-    -snort-rdir <rule dir>        - Path to snort rules directory.
+    --snort-rdir <rule dir>        - Path to snort rules directory.
     --debug,                      - Run psad in debugging mode.
     --debug-sid <sid>             - Debug a specific Snort rule.
     -D,  --Dump-conf              - Dump psad configuration on STDOUT and
@@ -10023,6 +10057,9 @@ Options:
     -c,  --config <config file>   - Use <config file> instead of the normal
                                     config file located at
                                     $config_file.
+    -O, --Override-config <str>   - Allow config variables from the normal
+                                    $config_file to be superseded with values
+                                    from the specified file(s).
     -I,  --Interval <seconds>     - Configure the check interval from the
                                     command line to override the 5 second
                                     default.

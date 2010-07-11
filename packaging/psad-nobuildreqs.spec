@@ -6,7 +6,7 @@
 %define psadrundir /var/run/psad
 %define psadvarlibdir /var/lib/psad
 
-### $Id: psad.spec 2289 2010-07-09 19:27:52Z mbr $
+### $Id: psad.spec 2253 2009-02-21 04:29:50Z mbr $
 
 ### get the first @INC directory that includes the string "linux".
 ### This may be 'i386-linux', or 'i686-linux-thread-multi', etc.
@@ -22,7 +22,6 @@ Url: http://www.cipherdyne.org/psad/
 Source: %name-%version.tar.gz
 BuildRoot: %_tmppath/%{name}-buildroot
 Requires: iptables
-BuildRequires: perl-ExtUtils-MakeMaker
 #Prereq: rpm-helper
 
 %description

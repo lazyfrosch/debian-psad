@@ -1,170 +1,143 @@
 ------------------------------------------------------------------------
-r2255 | mbr | 2009-02-20 23:38:59 -0500 (Fri, 20 Feb 2009) | 1 line
-Changed paths:
-   M /psad/branches/psad-2.1.5/CREDITS
+r2290 | mbr | 2010-07-09 15:28:52 -0400 (Fri, 09 Jul 2010) | 1 line
+
+created psad-2.1.6 branch
+------------------------------------------------------------------------
+r2289 | mbr | 2010-07-09 15:27:52 -0400 (Fri, 09 Jul 2010) | 1 line
+
+updated RPM spec files for the 2.1.6 release
+------------------------------------------------------------------------
+r2288 | mbr | 2010-07-09 15:23:46 -0400 (Fri, 09 Jul 2010) | 1 line
+
+psad-2.1.6 release date
+------------------------------------------------------------------------
+r2287 | mbr | 2010-07-09 07:49:29 -0400 (Fri, 09 Jul 2010) | 1 line
+
+added ChangeLog detail to the Decode_Month() bug (specifically the error message itself)
+------------------------------------------------------------------------
+r2286 | mbr | 2010-07-08 07:47:19 -0400 (Thu, 08 Jul 2010) | 1 line
+
+minor bug fix in legacy code to reference the selected syslog.conf for existance problems
+------------------------------------------------------------------------
+r2285 | mbr | 2010-07-07 20:18:16 -0400 (Wed, 07 Jul 2010) | 1 line
+
+bumped version to 2.1.6
+------------------------------------------------------------------------
+r2284 | mbr | 2010-07-07 20:16:29 -0400 (Wed, 07 Jul 2010) | 1 line
+
+minor ChangeLog update
+------------------------------------------------------------------------
+r2282 | mbr | 2010-07-01 21:02:53 -0400 (Thu, 01 Jul 2010) | 1 line
+
+tagged psad-2.1.6-pre4
+------------------------------------------------------------------------
+r2281 | mbr | 2010-07-01 21:02:04 -0400 (Thu, 01 Jul 2010) | 3 lines
+
+- Bug fix for Decode_Month() call in DShield processing code to ensure
+proper month handling for iptables log message time stamps.
+
+------------------------------------------------------------------------
+r2280 | mbr | 2010-02-01 22:42:59 -0500 (Mon, 01 Feb 2010) | 1 line
+
+applied man page spelling fix from Franck
+------------------------------------------------------------------------
+r2279 | mbr | 2010-02-01 22:39:06 -0500 (Mon, 01 Feb 2010) | 1 line
+
+minor spaces fix
+------------------------------------------------------------------------
+r2278 | mbr | 2009-12-22 21:13:47 -0500 (Tue, 22 Dec 2009) | 1 line
+
+minor copyright update
+------------------------------------------------------------------------
+r2277 | mbr | 2009-12-01 20:47:57 -0500 (Tue, 01 Dec 2009) | 1 line
+
+minor formatting fix
+------------------------------------------------------------------------
+r2276 | mbr | 2009-11-13 22:17:33 -0500 (Fri, 13 Nov 2009) | 1 line
+
+minor wording fix
+------------------------------------------------------------------------
+r2275 | mbr | 2009-11-13 22:16:28 -0500 (Fri, 13 Nov 2009) | 1 line
+
+minor wording fix (found by Simon)
+------------------------------------------------------------------------
+r2274 | mbr | 2009-09-05 14:56:06 -0400 (Sat, 05 Sep 2009) | 1 line
+
+minor usage() dashes fix
+------------------------------------------------------------------------
+r2273 | mbr | 2009-09-05 14:55:49 -0400 (Sat, 05 Sep 2009) | 10 lines
+
+For all RPM's built on the local system (Ubuntu for now), updated to reference the
+"-nobuildreqs.spec" file so that the "BuildRequires: perl-ExtUtils-MakeMaker" directive
+is not used.  Using this results in the following error on an Ubuntu system where no
+software is installed/upgrade with RPM:
+
+rpm: To install rpm packages on Debian systems, use alien. See README.Debian.
+error: cannot open Packages index using db3 - No such file or directory (2)
+error: cannot open Packages database in /var/lib/rpm
+
+
+------------------------------------------------------------------------
+r2272 | mbr | 2009-09-05 14:55:39 -0400 (Sat, 05 Sep 2009) | 10 lines
+
+For all RPM's built on the local system (Ubuntu for now), updated to reference the
+"-nobuildreqs.spec" file so that the "BuildRequires: perl-ExtUtils-MakeMaker" directive
+is not used.  Using this results in the following error on an Ubuntu system where no
+software is installed/upgrade with RPM:
+
+rpm: To install rpm packages on Debian systems, use alien. See README.Debian.
+error: cannot open Packages index using db3 - No such file or directory (2)
+error: cannot open Packages database in /var/lib/rpm
+
+
+------------------------------------------------------------------------
+r2271 | mbr | 2009-09-02 22:18:57 -0400 (Wed, 02 Sep 2009) | 1 line
+
+applied update patch to the psad.SlackBuild file from pyllyukko
+------------------------------------------------------------------------
+r2270 | mbr | 2009-07-30 02:11:13 -0400 (Thu, 30 Jul 2009) | 1 line
+
+updated to include Sourcefire trademark mention
+------------------------------------------------------------------------
+r2269 | mbr | 2009-07-30 02:10:52 -0400 (Thu, 30 Jul 2009) | 1 line
+
+(Franc Joncourt) Found psad man page section errors with manpage-alert.
+------------------------------------------------------------------------
+r2267 | mbr | 2009-03-31 23:49:02 -0400 (Tue, 31 Mar 2009) | 1 line
+
+bumped version to 2.1.6-pre3
+------------------------------------------------------------------------
+r2266 | mbr | 2009-03-31 23:48:41 -0400 (Tue, 31 Mar 2009) | 1 line
+
+(Franck Joncourt) finished off the --Override-config code for kmsgsd and HUP signal handling, and added man page updates as well
+------------------------------------------------------------------------
+r2264 | mbr | 2009-03-28 10:09:49 -0400 (Sat, 28 Mar 2009) | 1 line
+
+bumped version to 2.1.6-pre2
+------------------------------------------------------------------------
+r2263 | mbr | 2009-03-28 10:09:34 -0400 (Sat, 28 Mar 2009) | 4 lines
+
+- (Franck Joncourt) Added --Override-config feature so that alternate
+configuration files can be specified on the command line to override
+configuration variables in the standard /etc/psad/psad.conf file.
+
+------------------------------------------------------------------------
+r2261 | mbr | 2009-03-23 23:10:34 -0400 (Mon, 23 Mar 2009) | 1 line
+
+bumped version to 2.1.6-pre1
+------------------------------------------------------------------------
+r2260 | mbr | 2009-03-23 23:09:35 -0400 (Mon, 23 Mar 2009) | 4 lines
+
+- (Franck Joncourt) Submitted patches to fix stderr redirection for the
+usage of the mail binary, and to close stdout, stdin, and stderr when
+running psad as a daemon.
+
+------------------------------------------------------------------------
+r2259 | mbr | 2009-03-22 08:33:59 -0400 (Sun, 22 Mar 2009) | 1 line
+
+minor quoting update for mail command execution
+------------------------------------------------------------------------
+r2258 | mbr | 2009-02-20 23:47:04 -0500 (Fri, 20 Feb 2009) | 1 line
 
 added Miroslav Grepl
-------------------------------------------------------------------------
-r2254 | mbr | 2009-02-20 23:30:37 -0500 (Fri, 20 Feb 2009) | 1 line
-Changed paths:
-   A /psad/branches/psad-2.1.5 (from /psad/trunk:2253)
-
-created psad-2.1.5 branch
-------------------------------------------------------------------------
-r2253 | mbr | 2009-02-20 23:29:50 -0500 (Fri, 20 Feb 2009) | 1 line
-Changed paths:
-   M /psad/trunk/ChangeLog
-   M /psad/trunk/VERSION
-   M /psad/trunk/nf2csv
-   M /psad/trunk/packaging/psad-nodeps.spec
-   M /psad/trunk/packaging/psad.spec
-   M /psad/trunk/psad
-
-psad-2.1.5 release
-------------------------------------------------------------------------
-r2252 | mbr | 2009-02-20 23:25:42 -0500 (Fri, 20 Feb 2009) | 3 lines
-Changed paths:
-   M /psad/trunk/ChangeLog
-   M /psad/trunk/deps/IPTables-ChainMgr/Changes
-   M /psad/trunk/deps/IPTables-ChainMgr/Makefile.PL
-   M /psad/trunk/deps/IPTables-ChainMgr/README
-   M /psad/trunk/deps/IPTables-ChainMgr/VERSION
-   M /psad/trunk/deps/IPTables-ChainMgr/lib/IPTables/ChainMgr.pm
-   M /psad/trunk/deps/IPTables-Parse/Changes
-   M /psad/trunk/deps/IPTables-Parse/VERSION
-   M /psad/trunk/deps/IPTables-Parse/lib/IPTables/Parse.pm
-
-- Updated IPTables::Parse to 0.7.
-- Updated IPTables::ChainMgr to 0.9.
-
-------------------------------------------------------------------------
-r2251 | mbr | 2009-02-20 23:22:05 -0500 (Fri, 20 Feb 2009) | 5 lines
-Changed paths:
-   M /psad/trunk/ChangeLog
-   M /psad/trunk/psad
-
-- Bug fix when ENABLE_SYSLOG_FILE is enabled to run a preliminary regex
-match on each syslog message because kmsgsd is not running and therefore
-has not gone through the kmsgsd tests for a properly structured iptables
-message.
-
-------------------------------------------------------------------------
-r2250 | mbr | 2009-02-20 21:44:49 -0500 (Fri, 20 Feb 2009) | 1 line
-Changed paths:
-   M /psad/trunk/ChangeLog
-
-minor wording update for SELinux policy path
-------------------------------------------------------------------------
-r2249 | mbr | 2009-01-24 16:42:40 -0500 (Sat, 24 Jan 2009) | 2 lines
-Changed paths:
-   M /psad/trunk/ChangeLog
-   A /psad/trunk/selinux
-   A /psad/trunk/selinux/README
-   A /psad/trunk/selinux/psad.fc
-   A /psad/trunk/selinux/psad.if
-   A /psad/trunk/selinux/psad.te
-
-(Miroslav Grepl) Contributed policy file to make psad compatible with SELinux.
-
-------------------------------------------------------------------------
-r2248 | mbr | 2009-01-24 16:38:35 -0500 (Sat, 24 Jan 2009) | 1 line
-Changed paths:
-   M /psad/trunk/psad.8
-
-updated man page to remove confusing tab chars in syslog.conf psadfifo line
-------------------------------------------------------------------------
-r2247 | mbr | 2008-10-26 18:58:35 -0400 (Sun, 26 Oct 2008) | 1 line
-Changed paths:
-   M /psad/trunk/psad.conf
-
-minor comment update to psad.conf
-------------------------------------------------------------------------
-r2245 | mbr | 2008-10-14 07:43:06 -0400 (Tue, 14 Oct 2008) | 1 line
-Changed paths:
-   M /psad/trunk/VERSION
-   M /psad/trunk/nf2csv
-   M /psad/trunk/psad
-
-version 2.1.5-pre3
-------------------------------------------------------------------------
-r2244 | mbr | 2008-10-14 07:42:43 -0400 (Tue, 14 Oct 2008) | 3 lines
-Changed paths:
-   M /psad/trunk/CREDITS
-   M /psad/trunk/ChangeLog
-   M /psad/trunk/psad
-
-- Bug fix for local server ports not reported correctly under netstat
-parsing (Franck Joncourt).
-
-------------------------------------------------------------------------
-r2243 | mbr | 2008-08-31 09:46:47 -0400 (Sun, 31 Aug 2008) | 1 line
-Changed paths:
-   M /psad/trunk/fwcheck_psad.pl
-
-added check for the 'auto' directory in order to import all appropriate perl module directories
-------------------------------------------------------------------------
-r2242 | mbr | 2008-08-31 09:45:23 -0400 (Sun, 31 Aug 2008) | 1 line
-Changed paths:
-   M /psad/trunk/CREDITS
-   M /psad/trunk/fwcheck_psad.pl
-
-Applied patch from Franck Joncourt to fix missing check for the 'mail' command
-------------------------------------------------------------------------
-r2240 | mbr | 2008-08-29 00:13:04 -0400 (Fri, 29 Aug 2008) | 1 line
-Changed paths:
-   M /psad/trunk/VERSION
-   M /psad/trunk/nf2csv
-   M /psad/trunk/psad
-
-bumped version to 2.1.5-pre2
-------------------------------------------------------------------------
-r2239 | mbr | 2008-08-29 00:11:50 -0400 (Fri, 29 Aug 2008) | 1 line
-Changed paths:
-   M /psad/trunk/nf2csv.1
-
-dash fixes from Franck
-------------------------------------------------------------------------
-r2238 | mbr | 2008-08-29 00:09:32 -0400 (Fri, 29 Aug 2008) | 1 line
-Changed paths:
-   M /psad/trunk/CREDITS
-   M /psad/trunk/psad.8
-
-dash fixes from Franck
-------------------------------------------------------------------------
-r2237 | mbr | 2008-08-29 00:06:20 -0400 (Fri, 29 Aug 2008) | 1 line
-Changed paths:
-   A /psad/trunk/fwcheck_psad.8
-
-added fwcheck_psad.8 file
-------------------------------------------------------------------------
-r2235 | mbr | 2008-08-26 20:08:56 -0400 (Tue, 26 Aug 2008) | 1 line
-Changed paths:
-   M /psad/trunk/VERSION
-   M /psad/trunk/nf2csv
-   M /psad/trunk/psad
-
-bumped version to 2.1.5-pre1
-------------------------------------------------------------------------
-r2234 | mbr | 2008-08-26 20:08:36 -0400 (Tue, 26 Aug 2008) | 4 lines
-Changed paths:
-   M /psad/trunk/CREDITS
-   M /psad/trunk/ChangeLog
-   M /psad/trunk/init-scripts/psad-init.gentoo
-
-- (Steve B) Submitted patch to fix a bug in the start() function in the
-Gentoo init script which caused psad to not be started and the error
-"* ERROR: psad failed to start" to be generated.
-
-------------------------------------------------------------------------
-r2233 | mbr | 2008-08-26 20:08:17 -0400 (Tue, 26 Aug 2008) | 1 line
-Changed paths:
-   M /psad/trunk/psad
-
-applied 'auto' heuristic from the fwknop project for finding perl module import subdirectories
-------------------------------------------------------------------------
-r2232 | mbr | 2008-08-21 23:48:43 -0400 (Thu, 21 Aug 2008) | 1 line
-Changed paths:
-   M /psad/trunk/CREDITS
-
-added deps/ blurb for Franck
 ------------------------------------------------------------------------
