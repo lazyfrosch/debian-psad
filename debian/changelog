@@ -3,6 +3,7 @@ psad (2.1.6-1) UNRELEASED; urgency=low
   * New upstream release:
     + Alternate configuration files can be specified to override the default
       psad.conf. (Closes: #409815)
+    + Removed fixes_spelling.diff applied patch.
   * Added psad.default file to allow the user to specify argument he wants to
     pass to psad when invoking through the initscript. d.NEWS is updated to
     mention this new feature.
