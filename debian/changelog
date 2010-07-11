@@ -4,9 +4,13 @@ psad (2.1.6-1) UNRELEASED; urgency=low
     + Alternate configuration files can be specified to override the default
       psad.conf. (Closes: #409815)
     + Removed fixes_spelling.diff applied patch.
-  * Added psad.default file to allow the user to specify argument he wants to
-    pass to psad when invoking through the initscript. d.NEWS is updated to
-    mention this new feature.
+  * Refreshed packaging to handle the brand new override-config feature from
+    upstream:
+    + Added psad.default file to allow the user to specify argument he wants to
+      pass to psad when invoking through the initscript.
+    + Refreshed initscript to handle the new variable DAEMON_ARGS which is
+      defined in /etc/default/psad.
+    + Updated d.NEWS accordingly.
   * Moved Homepage field to the upper section in d.control.
   * Updated Depends field in d.control to use default-mta rather than exim4.
   * Bastille is moved from Recommends to Suggests, and the Conflicts is
