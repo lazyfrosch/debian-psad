@@ -3,6 +3,8 @@ psad (2.1.6-1) UNRELEASED; urgency=low
   * New upstream release:
     + Alternate configuration files can be specified to override the default
       psad.conf. (Closes: #409815)
+  * Added psad.default file to allow the user to specify argument he wants to
+    pass to psad when invoking through the initscript.
   * Moved Homepage field to the upper section in d.control.
   * Updated Depends field in d.control to use default-mta rather than exim4.
 
