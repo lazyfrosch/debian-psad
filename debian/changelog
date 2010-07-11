@@ -12,9 +12,11 @@ psad (2.1.6-1) UNRELEASED; urgency=low
       defined in /etc/default/psad.
     + Updated d.NEWS accordingly.
   * Moved Homepage field to the upper section in d.control.
-  * Updated Depends field in d.control to use default-mta rather than exim4.
-  * Bastille is moved from Recommends to Suggests, and the Conflicts is
-    removed since it only affected old releases of Bastille.
+  * Updated dependencies:
+    + Used default-mta rather than exim4.
+    + Moved bastille from Recommends to Suggests, and the removed Conflicts
+      since it only affected old releases of Bastille.
+  * Bumped up Standards-Version to 3.9.0 (no changes).
 
  -- Franck Joncourt <franck@debian.org>  Sun, 11 Jul 2010 14:39:28 +0200
 
