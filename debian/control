@@ -17,9 +17,7 @@ Depends: ${misc:Depends}, ${shlibs:Depends}, ${perl:Depends},
  whois, psmisc, libiptables-parse-perl, libiptables-chainmgr-perl,
  default-mta | mail-transport-agent, bsd-mailx | mailx | mailutils,
  lsb-base (>= 3.0-6)
-Recommends: bastille
-Suggests: fwsnort
-Conflicts: bastille (<< 1:1.3.0-4)
+Suggests: fwsnort, bastille
 Description: Port Scan Attack Detector
  PSAD is a collection of four lightweight system daemons (in Perl and
  C) designed to work with iptables to detect port scans. It features:
