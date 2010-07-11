@@ -1,3 +1,12 @@
+psad (2.1.6-1) unstable; urgency=low
+
+  It is now possible to pass arguments to psad through the /etc/default/psad
+  file. It makes possible to handle override files, and thus keep your
+  settings in a dedicated directory without having to recheck them after
+  each upgrade of psad.
+
+ -- Franck Joncourt <franck@debian.org>  Sun, 11 Jul 2010 15:16:16 +0200
+
 psad (2.1.5-1) unstable; urgency=low
 
   The Snort rules are not bundled anymore in the package.
