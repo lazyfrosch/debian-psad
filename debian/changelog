@@ -1,4 +1,4 @@
-psad (2.1.6-1) UNRELEASED; urgency=low
+psad (2.1.6-1) unstable; urgency=low
 
   * New upstream release:
     + Alternate configuration files can be specified to override the default
@@ -14,12 +14,12 @@ psad (2.1.6-1) UNRELEASED; urgency=low
   * Moved Homepage field to the upper section in d.control.
   * Updated dependencies:
     + Used default-mta rather than exim4.
-    + Moved bastille from Recommends to Suggests, and the removed Conflicts
+    + Moved bastille from Recommends to Suggests, and removed Conflicts
       since it only affected old releases of Bastille.
   * Bumped up Standards-Version to 3.9.0 (no changes).
   * Added new patch t_upstream_hyphen.diff to fix hyphen in manual page.
 
- -- Franck Joncourt <franck@debian.org>  Sun, 11 Jul 2010 14:39:28 +0200
+ -- Franck Joncourt <franck@debian.org>  Sun, 11 Jul 2010 18:56:54 +0200
 
 psad (2.1.5-3) unstable; urgency=low
 
