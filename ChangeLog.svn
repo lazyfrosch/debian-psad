@@ -1,143 +1,76 @@
 ------------------------------------------------------------------------
-r2290 | mbr | 2010-07-09 15:28:52 -0400 (Fri, 09 Jul 2010) | 1 line
+r2299 | mbr | 2010-07-14 17:56:32 -0400 (Wed, 14 Jul 2010) | 1 line
+Changed paths:
+   A /psad/branches/psad-2.1.7 (from /psad/trunk:2298)
 
-created psad-2.1.6 branch
+created the psad-2.1.7 branch
 ------------------------------------------------------------------------
-r2289 | mbr | 2010-07-09 15:27:52 -0400 (Fri, 09 Jul 2010) | 1 line
+r2298 | mbr | 2010-07-14 17:52:07 -0400 (Wed, 14 Jul 2010) | 1 line
+Changed paths:
+   M /psad/trunk/VERSION
+   M /psad/trunk/nf2csv
+   M /psad/trunk/packaging/psad-nobuildreqs.spec
+   M /psad/trunk/packaging/psad-nodeps.spec
+   M /psad/trunk/packaging/psad.spec
+   M /psad/trunk/psad
 
-updated RPM spec files for the 2.1.6 release
+psad-2.1.7 release
 ------------------------------------------------------------------------
-r2288 | mbr | 2010-07-09 15:23:46 -0400 (Fri, 09 Jul 2010) | 1 line
+r2297 | mbr | 2010-07-14 17:02:07 -0400 (Wed, 14 Jul 2010) | 10 lines
+Changed paths:
+   M /psad/trunk/CREDITS
+   M /psad/trunk/ChangeLog
+   M /psad/trunk/psad
+   M /psad/trunk/psad.conf
 
-psad-2.1.6 release date
-------------------------------------------------------------------------
-r2287 | mbr | 2010-07-09 07:49:29 -0400 (Fri, 09 Jul 2010) | 1 line
-
-added ChangeLog detail to the Decode_Month() bug (specifically the error message itself)
-------------------------------------------------------------------------
-r2286 | mbr | 2010-07-08 07:47:19 -0400 (Thu, 08 Jul 2010) | 1 line
-
-minor bug fix in legacy code to reference the selected syslog.conf for existance problems
-------------------------------------------------------------------------
-r2285 | mbr | 2010-07-07 20:18:16 -0400 (Wed, 07 Jul 2010) | 1 line
-
-bumped version to 2.1.6
-------------------------------------------------------------------------
-r2284 | mbr | 2010-07-07 20:16:29 -0400 (Wed, 07 Jul 2010) | 1 line
-
-minor ChangeLog update
-------------------------------------------------------------------------
-r2282 | mbr | 2010-07-01 21:02:53 -0400 (Thu, 01 Jul 2010) | 1 line
-
-tagged psad-2.1.6-pre4
-------------------------------------------------------------------------
-r2281 | mbr | 2010-07-01 21:02:04 -0400 (Thu, 01 Jul 2010) | 3 lines
-
-- Bug fix for Decode_Month() call in DShield processing code to ensure
-proper month handling for iptables log message time stamps.
-
-------------------------------------------------------------------------
-r2280 | mbr | 2010-02-01 22:42:59 -0500 (Mon, 01 Feb 2010) | 1 line
-
-applied man page spelling fix from Franck
-------------------------------------------------------------------------
-r2279 | mbr | 2010-02-01 22:39:06 -0500 (Mon, 01 Feb 2010) | 1 line
-
-minor spaces fix
-------------------------------------------------------------------------
-r2278 | mbr | 2009-12-22 21:13:47 -0500 (Tue, 22 Dec 2009) | 1 line
-
-minor copyright update
-------------------------------------------------------------------------
-r2277 | mbr | 2009-12-01 20:47:57 -0500 (Tue, 01 Dec 2009) | 1 line
-
-minor formatting fix
-------------------------------------------------------------------------
-r2276 | mbr | 2009-11-13 22:17:33 -0500 (Fri, 13 Nov 2009) | 1 line
-
-minor wording fix
-------------------------------------------------------------------------
-r2275 | mbr | 2009-11-13 22:16:28 -0500 (Fri, 13 Nov 2009) | 1 line
-
-minor wording fix (found by Simon)
-------------------------------------------------------------------------
-r2274 | mbr | 2009-09-05 14:56:06 -0400 (Sat, 05 Sep 2009) | 1 line
-
-minor usage() dashes fix
-------------------------------------------------------------------------
-r2273 | mbr | 2009-09-05 14:55:49 -0400 (Sat, 05 Sep 2009) | 10 lines
-
-For all RPM's built on the local system (Ubuntu for now), updated to reference the
-"-nobuildreqs.spec" file so that the "BuildRequires: perl-ExtUtils-MakeMaker" directive
-is not used.  Using this results in the following error on an Ubuntu system where no
-software is installed/upgrade with RPM:
-
-rpm: To install rpm packages on Debian systems, use alien. See README.Debian.
-error: cannot open Packages index using db3 - No such file or directory (2)
-error: cannot open Packages database in /var/lib/rpm
+- Updated psad to issues whois lookups against IP addresses that are not
+directly connected to the local system.  This is useful for example when
+an internal system is scanning an external destination system, and the
+scan is logged in the FORWARD chain.  Issuing whois lookups on the
+internal system (frequently on RFC 1918 address space) is not usually
+very useful, but issuing the whois lookup against the destination system
+gives much more interesting data.  This feature can be disabled with the
+new ENABLE_WHOIS_FORCE_SRC_IP variable.
 
 
 ------------------------------------------------------------------------
-r2272 | mbr | 2009-09-05 14:55:39 -0400 (Sat, 05 Sep 2009) | 10 lines
+r2296 | mbr | 2010-07-14 11:00:07 -0400 (Wed, 14 Jul 2010) | 6 lines
+Changed paths:
+   M /psad/trunk/CREDITS
+   M /psad/trunk/ChangeLog
+   M /psad/trunk/psad
+   M /psad/trunk/psad.conf
 
-For all RPM's built on the local system (Ubuntu for now), updated to reference the
-"-nobuildreqs.spec" file so that the "BuildRequires: perl-ExtUtils-MakeMaker" directive
-is not used.  Using this results in the following error on an Ubuntu system where no
-software is installed/upgrade with RPM:
+- Added ENABLE_WHOIS_FORCE_ASCII to replace any non-ascii characters in
+whois data (which is common with whois lookups against Chinese IP
+addresses for example) with the string "NA".  This option is disabled by
+default, but can be useful if errors like the following are seen upon
 
-rpm: To install rpm packages on Debian systems, use alien. See README.Debian.
-error: cannot open Packages index using db3 - No such file or directory (2)
-error: cannot open Packages database in /var/lib/rpm
-
-
-------------------------------------------------------------------------
-r2271 | mbr | 2009-09-02 22:18:57 -0400 (Wed, 02 Sep 2009) | 1 line
-
-applied update patch to the psad.SlackBuild file from pyllyukko
-------------------------------------------------------------------------
-r2270 | mbr | 2009-07-30 02:11:13 -0400 (Thu, 30 Jul 2009) | 1 line
-
-updated to include Sourcefire trademark mention
-------------------------------------------------------------------------
-r2269 | mbr | 2009-07-30 02:10:52 -0400 (Thu, 30 Jul 2009) | 1 line
-
-(Franc Joncourt) Found psad man page section errors with manpage-alert.
-------------------------------------------------------------------------
-r2267 | mbr | 2009-03-31 23:49:02 -0400 (Tue, 31 Mar 2009) | 1 line
-
-bumped version to 2.1.6-pre3
-------------------------------------------------------------------------
-r2266 | mbr | 2009-03-31 23:48:41 -0400 (Tue, 31 Mar 2009) | 1 line
-
-(Franck Joncourt) finished off the --Override-config code for kmsgsd and HUP signal handling, and added man page updates as well
-------------------------------------------------------------------------
-r2264 | mbr | 2009-03-28 10:09:49 -0400 (Sat, 28 Mar 2009) | 1 line
-
-bumped version to 2.1.6-pre2
-------------------------------------------------------------------------
-r2263 | mbr | 2009-03-28 10:09:34 -0400 (Sat, 28 Mar 2009) | 4 lines
-
-- (Franck Joncourt) Added --Override-config feature so that alternate
-configuration files can be specified on the command line to override
-configuration variables in the standard /etc/psad/psad.conf file.
 
 ------------------------------------------------------------------------
-r2261 | mbr | 2009-03-23 23:10:34 -0400 (Mon, 23 Mar 2009) | 1 line
+r2294 | mbr | 2010-07-11 21:06:13 -0400 (Sun, 11 Jul 2010) | 1 line
+Changed paths:
+   M /psad/trunk/VERSION
+   M /psad/trunk/nf2csv
+   M /psad/trunk/psad
 
-bumped version to 2.1.6-pre1
+bumped version to 2.1.7-pre1
 ------------------------------------------------------------------------
-r2260 | mbr | 2009-03-23 23:09:35 -0400 (Mon, 23 Mar 2009) | 4 lines
+r2293 | mbr | 2010-07-11 21:05:46 -0400 (Sun, 11 Jul 2010) | 9 lines
+Changed paths:
+   M /psad/trunk/CREDITS
+   M /psad/trunk/ChangeLog
+   M /psad/trunk/fwcheck_psad.pl
+   M /psad/trunk/psad
+   M /psad/trunk/psad.conf
 
-- (Franck Joncourt) Submitted patches to fix stderr redirection for the
-usage of the mail binary, and to close stdout, stdin, and stderr when
-running psad as a daemon.
+(Dan A. Dickey) Added the ability to use the "ip" command from the
+iproute2 tools to acquire IP addresses from local interfaces.  Dan's
+description is as follows: "...A main reason for doing this is in the
+case of multi-homed hosts. ifconfig sets these up on an interface using
+aliases, iproute2 does not.  So, for a multi-homed interface (eth0 with
+multiple addresses), ifconfig -a only shows the first one configured and
+not the rest.  ip addr shows all of the configured addresses...".
 
-------------------------------------------------------------------------
-r2259 | mbr | 2009-03-22 08:33:59 -0400 (Sun, 22 Mar 2009) | 1 line
 
-minor quoting update for mail command execution
-------------------------------------------------------------------------
-r2258 | mbr | 2009-02-20 23:47:04 -0500 (Fri, 20 Feb 2009) | 1 line
-
-added Miroslav Grepl
 ------------------------------------------------------------------------
