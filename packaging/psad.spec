@@ -1,12 +1,12 @@
 %define name psad
-%define version 2.1.6
+%define version 2.1.7
 %define release 1
 %define psadlibdir %_libdir/%name
 %define psadlogdir /var/log/psad
 %define psadrundir /var/run/psad
 %define psadvarlibdir /var/lib/psad
 
-### $Id: psad.spec 2289 2010-07-09 19:27:52Z mbr $
+### $Id: psad.spec 2298 2010-07-14 21:52:07Z mbr $
 
 ### get the first @INC directory that includes the string "linux".
 ### This may be 'i386-linux', or 'i686-linux-thread-multi', etc.
@@ -243,6 +243,9 @@ fi
 %_libdir/%name
 
 %changelog
+* Wed Jul 14 2010 Michael Rash <mbr@cipherdyne.org>
+- psad-2.1.7 release
+
 * Fri Jul 09 2010 Michael Rash <mbr@cipherdyne.org>
 - psad-2.1.6 release
 

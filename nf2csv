@@ -38,8 +38,8 @@
 use Getopt::Long 'GetOptions';
 use strict;
 
-my $version = '2.1.6';
-my $revision_svn = '$Revision: 2285 $';
+my $version = '2.1.7';
+my $revision_svn = '$Revision: 2298 $';
 my $rev_num = '1';
 ($rev_num) = $revision_svn =~ m|\$Rev.*:\s+(\S+)|;
 
