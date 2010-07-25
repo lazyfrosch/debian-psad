@@ -1,8 +1,8 @@
-psad (2.1.7-1) UNRELEASED; urgency=low
+psad (2.1.7-1) unstable; urgency=low
 
   * New upstream release.
 
- -- Franck Joncourt <franck@debian.org>  Sat, 17 Jul 2010 11:23:00 +0200
+ -- Franck Joncourt <franck@debian.org>  Sun, 25 Jul 2010 19:40:52 +0200
 
 psad (2.1.6-1) unstable; urgency=low
 
