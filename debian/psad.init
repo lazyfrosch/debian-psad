@@ -8,7 +8,7 @@
 # Short-Description: Port Scan Attack Detector (psad)
 ### END INIT INFO
 
-# Author: Franck Joncourt <franck.mail@dthconnex.com>
+# Author: Franck Joncourt <franck@debian.org>
 
 PATH=/sbin:/usr/sbin:/bin:/usr/bin
 DESC="Port Scan Attack Detector"
@@ -19,6 +19,10 @@ SCRIPTNAME=/etc/init.d/psad
 
 # Exit if the package is not installed
 [ -x "$DAEMON" ] || exit 0
+
+# Load user options to pass to psad daemon
+DAEMON_ARGS=""
+[ -r /etc/default/psad ] && . /etc/default/psad
 
 # Load the VERBOSE setting and other rcS variables
 . /lib/init/vars.sh
@@ -74,7 +78,7 @@ do_start()
 
 	# Try to start psad
 	if [ "$retval"  = "0" ]; then
-		start-stop-daemon --start --quiet --pidfile $PIDDIR/$NAME --exec $DAEMON
+		start-stop-daemon --start --quiet --pidfile $PIDDIR/$NAME --exec $DAEMON -- $DAEMON_ARGS
 		retval="$?"
 	fi
 

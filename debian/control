@@ -4,22 +4,20 @@ Priority: optional
 Maintainer: Franck Joncourt <franck@debian.org>
 Uploaders: Daniel Gubser <guterm@debian.org>
 Build-Depends: debhelper (>= 7)
-Standards-Version: 3.8.4
+Standards-Version: 3.9.0
 Vcs-git: git://git.debian.org/git/collab-maint/psad.git
 Vcs-Browser: http://git.debian.org/?p=collab-maint/psad.git
-
 Homepage: http://www.cipherdyne.org/psad/
+
 Package: psad
 Architecture: any
 Depends: ${misc:Depends}, ${shlibs:Depends}, ${perl:Depends},
  libunix-syslog-perl, iptables, rsyslog | system-log-daemon,
  libnetwork-ipv4addr-perl, libdate-calc-perl, libcarp-clan-perl,
  whois, psmisc, libiptables-parse-perl, libiptables-chainmgr-perl,
- exim4 | mail-transport-agent, bsd-mailx | mailx | mailutils,
+ default-mta | mail-transport-agent, bsd-mailx | mailx | mailutils,
  lsb-base (>= 3.0-6)
-Recommends: bastille
-Suggests: fwsnort
-Conflicts: bastille (<< 1:1.3.0-4)
+Suggests: fwsnort, bastille
 Description: Port Scan Attack Detector
  PSAD is a collection of four lightweight system daemons (in Perl and
  C) designed to work with iptables to detect port scans. It features:
