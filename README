@@ -103,7 +103,8 @@ along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
 
 psad makes use of many of the tcp, udp, and icmp signatures available in
-Snort (written by Marty Roesch, see http://www.snort.org).
+Snort (written by Marty Roesch, see http://www.snort.org).  Snort is a
+registered trademark of Sourcefire, Inc.
 
 
-$Id: README 1600 2006-09-10 22:20:16Z mbr $
+$Id: README 2270 2009-07-30 06:11:13Z mbr $
