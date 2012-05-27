@@ -8,6 +8,7 @@ psad (2.2-1) UNRELEASED; urgency=low
     in d.control.
   * Refreshed copyright holders in d.copyright.
   * Refreshed patch fixes_build.diff.
+  * Bumped up Standards-Version to 3.9.3.
 
  -- Franck Joncourt <franck@debian.org>  Sun, 27 May 2012 21:38:55 +0200
 
