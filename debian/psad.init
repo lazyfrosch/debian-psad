@@ -6,6 +6,7 @@
 # Default-Start:     2 3 4 5
 # Default-Stop:      0 1 6
 # Short-Description: Port Scan Attack Detector (psad)
+# Description:       Enable the Port Scan Attack Detector (psad)
 ### END INIT INFO
 
 # Author: Franck Joncourt <franck@debian.org>
