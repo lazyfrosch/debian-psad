@@ -7,6 +7,7 @@ psad (2.2-1) UNRELEASED; urgency=low
   * Updated perl dependency from libnetwork-ipv4addr-perl to libnet-ip-perl
     in d.control.
   * Refreshed copyright holders in d.copyright.
+  * Refreshed patch fixes_build.diff.
 
  -- Franck Joncourt <franck@debian.org>  Sun, 27 May 2012 21:38:55 +0200
 

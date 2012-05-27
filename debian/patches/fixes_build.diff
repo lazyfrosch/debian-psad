@@ -10,12 +10,10 @@ Signed-off-by: Franck Joncourt <franck@debian.org>
  Makefile |    6 ++++--
  1 files changed, 4 insertions(+), 2 deletions(-)
 
-diff --git a/Makefile b/Makefile
-index 245e63c..bc7cbe5 100644
 --- a/Makefile
 +++ b/Makefile
-@@ -26,10 +26,12 @@
- #  $Id: Makefile 1517 2006-01-07 02:25:10Z mbr $
+@@ -24,10 +24,12 @@
+ ##########################################################################
  #
  
 +OPTS = -Wall -O
@@ -29,5 +27,3 @@ index 245e63c..bc7cbe5 100644
  
  ### debug mode
  debug : kmsgsd.c psadwatchd.c psad_funcs.c strlcpy.c strlcat.c psad.h
--- 
-tg: (746e50e..) fixes/build (depends on: upstream)
