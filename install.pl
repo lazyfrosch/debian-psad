@@ -7,11 +7,11 @@
 # Purpose:  install.pl is the installation script for psad.  It is safe
 #           to execute install.pl even if psad has already been installed
 #           on a system since install.pl will preserve the existing
-#           config section within the new script.
+#           config section.
 #
 # Credits:  (see the CREDITS file)
 #
-# Copyright (C) 1999-2008 Michael Rash (mbr@cipherdyne.org)
+# Copyright (C) 1999-2012 Michael Rash (mbr@cipherdyne.org)
 #
 # License (GNU Public License):
 #
@@ -28,8 +28,6 @@
 # TODO:
 #
 #########################################################################
-#
-# $Id: install.pl 2217 2008-08-15 01:06:54Z mbr $
 #
 
 use Cwd;
@@ -55,12 +53,17 @@ my $makeCmd      = '/usr/bin/make';
 my $perlCmd      = '/usr/bin/perl';
 my $wgetCmd      = '/usr/bin/wget';
 my $runlevelCmd  = '/sbin/runlevel';
+
+my $install_root = '/';
+
+my $answers_file = 'install.answers';
 #============ end config ============
 
 my %file_vars = (
     'signatures'    => 'SIGS_FILE',
     'auto_dl'       => 'AUTO_DL_FILE',
     'icmp_types'    => 'ICMP_TYPES_FILE',
+    'icmp6_types'   => 'ICMP6_TYPES_FILE',
     'posf'          => 'POSF_FILE',
     'pf.os'         => 'P0F_FILE',
     'snort_rule_dl' => 'SNORT_RULE_DL_FILE',
@@ -98,9 +101,9 @@ my %required_perl_modules = (
         'force-install' => 0,
         'mod-dir' => 'Date-Calc'
     },
-    'Net::IPv4Addr' => {
+    'NetAddr::IP' => {
         'force-install' => 0,
-        'mod-dir' => 'Net-IPv4Addr'
+        'mod-dir' => 'NetAddr-IP'
     },
     'IPTables::Parse' => {
         'force-install' => 1,
@@ -111,6 +114,16 @@ my %required_perl_modules = (
         'mod-dir' => 'IPTables-ChainMgr'
     },
 );
+
+my @ordered_modules = (qw/
+    Unix::Syslog
+    Bit::Vector
+    Storable
+    Date::Calc
+    NetAddr::IP
+    IPTables::Parse
+    IPTables::ChainMgr
+/);
 
 my %config = ();
 my %cmds   = ();
@@ -143,11 +156,15 @@ my $uninstall   = 0;
 my $help        = 0;
 my $archived_old = 0;
 my $skip_syslog_test = 0;
+my $use_answers = 0;
+my $no_write_answers = 0;
+my %answers = ();
 my $skip_module_install   = 0;
 my $cmdline_force_install = 0;
 my $force_path_update = 0;
 my $force_mod_re = '';
 my $exclude_mod_re = '';
+my $install_test_dir = 0;
 my $no_rm_old_lib_dir = 0;
 my $syslog_conf = '';
 my $locale = 'C';  ### default LC_ALL env variable
@@ -157,6 +174,7 @@ my $init_dir = '/etc/init.d';
 my $init_name = 'psad';
 my $install_syslog_fifo = 0;
 my $runlevel = -1;
+my @installation_lines = ();
 
 ### make Getopts case sensitive
 Getopt::Long::Configure('no_ignore_case');
@@ -168,6 +186,9 @@ Getopt::Long::Configure('no_ignore_case');
     'Exclude-mod-regex=s' => \$exclude_mod_re, ### exclude a particular perl module
     'path-update'       => \$force_path_update, ### update command paths
     'Skip-mod-install'  => \$skip_module_install,
+    'Use-answers'       => \$use_answers,
+    'answers-file=s'    => \$answers_file,
+    'no-write-answers'  => \$no_write_answers,
     'no-rm-lib-dir'     => \$no_rm_old_lib_dir, ### remove any old /usr/lib/psad dir
     'no-preserve'       => \$noarchive,   ### Don't preserve existing configs.
     'syslog-conf=s'     => \$syslog_conf, ### specify path to syslog config file.
@@ -176,6 +197,8 @@ Getopt::Long::Configure('no_ignore_case');
     'init-dir=s'        => \$init_dir,
     'init-name=s'       => \$init_name,
     'install-syslog-fifo' => \$install_syslog_fifo,
+    'install-root=s'    => \$install_root,
+    'install-test-dir'  => \$install_test_dir,
     'runlevel=i'        => \$runlevel,
     'LC_ALL=s'          => \$locale,
     'no-LC_ALL'         => \$no_locale,
@@ -186,12 +209,21 @@ Getopt::Long::Configure('no_ignore_case');
 ### set LC_ALL env variable
 $ENV{'LC_ALL'} = $locale unless $no_locale;
 
+### make a copy of the original psad.conf file and restore at the end
+copy $psad_conf_file, "${psad_conf_file}.orig" or die "[*] Could not ",
+    "copy $psad_conf_file -> $psad_conf_file.orig";
+
+if ($install_test_dir) {
+    $install_root = getcwd() . '/test/psad-install';
+    $init_dir     = $install_root . '/etc/init.d';
+}
+
+&import_answers() if $use_answers;
+
 ### import paths from default psad.conf
 &import_config();
 
-my @LOGR_FILES = (*STDOUT, $config{'INSTALL_LOG_FILE'});
-
-$force_mod_re = qr|$force_mod_re| if $force_mod_re;
+$force_mod_re   = qr|$force_mod_re|   if $force_mod_re;
 $exclude_mod_re = qr|$exclude_mod_re| if $exclude_mod_re;
 
 ### see if the deps/ directory exists, and if not then we are installing
@@ -201,12 +233,6 @@ $skip_module_install = 1 unless -d $deps_dir;
 $cmds{'make'}     = $makeCmd;
 $cmds{'perl'}     = $perlCmd;
 $cmds{'runlevel'} = $runlevelCmd;
-
-if (-e $config{'INSTALL_LOG_FILE'}) {
-    open INSTALL, "> $config{'INSTALL_LOG_FILE'}" or
-        die "[*] Could not open $config{'INSTALL_LOG_FILE'}: $!";
-    close INSTALL;
-}
 
 my $distro = &get_distro();
 
@@ -228,21 +254,17 @@ unless (-d $init_dir) {
         $init_dir = '/etc/rc.d';
     } else {
         die "[*] Cannot find the init script directory, use ",
-            "--init-dir <path>\n";
+            "--init-dir <path>" unless $install_test_dir;
     }
 }
 
 ### need to make sure this exists before attempting to
 ### write anything to the install log.
-mkdir $config{'PSAD_DIR'}, 0500 unless -d $config{'PSAD_DIR'};
+&full_mkdir($config{'PSAD_DIR'}, 0700);
 
 ### make sure the system binaries are where we expect
 ### them to be.
 &check_commands();
-
-### check to make sure we are running as root
-$< == 0 && $> == 0 or die "You need to be root (or equivalent UID 0",
-    " account) to install/uninstall psad!\n";
 
 ### occasionally things from old psad installations need to be
 ### dealt with separately.
@@ -253,6 +275,18 @@ if ($uninstall) {
 } else {
     &install();
 }
+
+open F, "> $config{'INSTALL_LOG_FILE'}" or die $!;
+print F for @installation_lines;
+close F;
+
+### restore the original psad.conf file (this is just the local one in the
+### sources directory).
+if (-e "${psad_conf_file}.orig") {
+    unlink $psad_conf_file if -e $psad_conf_file;
+    move "${psad_conf_file}.orig", $psad_conf_file;
+}
+
 exit 0;
 #================= end main =================
 
@@ -272,11 +306,11 @@ sub install() {
 
     unless (-d $config{'PSAD_RUN_DIR'}) {
         &logr("[+] Creating $config{'PSAD_RUN_DIR'}\n");
-        mkdir $config{'PSAD_RUN_DIR'}, 0500;
+        &full_mkdir($config{'PSAD_RUN_DIR'}, 0700);
     }
     unless (-d $config{'PSAD_FIFO_DIR'}) {
         &logr("[+] Creating $config{'PSAD_FIFO_DIR'}\n");
-        mkdir $config{'PSAD_FIFO_DIR'}, 0500;
+        &full_mkdir($config{'PSAD_FIFO_DIR'}, 0700);
     }
 
     ### change any existing psad module directory to allow anyone to import
@@ -296,34 +330,42 @@ sub install() {
     }
     unless (-d $config{'PSAD_CONF_DIR'}) {
         &logr("[+] Creating $config{'PSAD_CONF_DIR'}\n");
-        mkdir $config{'PSAD_CONF_DIR'}, 0500;
+        &full_mkdir($config{'PSAD_CONF_DIR'}, 0700);
     }
     unless (-d $config{'CONF_ARCHIVE_DIR'}) {
         &logr("[+] Creating $config{'CONF_ARCHIVE_DIR'}\n");
-        mkdir $config{'CONF_ARCHIVE_DIR'}, 0500;
+        &full_mkdir($config{'CONF_ARCHIVE_DIR'}, 0700);
     }
-    unless (-e $config{'PSAD_FIFO_FILE'}) {
-        &logr("[+] Creating named pipe $config{'PSAD_FIFO_FILE'}\n");
-        unless (((system "$cmds{'mknod'} -m 600 " .
-                "$config{'PSAD_FIFO_FILE'} p")>>8) == 0) {
-            &logr("[*] Could not create the named pipe " .
-                "\"$config{'PSAD_FIFO_FILE'}\"!\n" .
-                "[*] psad requires this file to exist!  Aborting install.\n");
-            die;
-        }
-        unless (-p $config{'PSAD_FIFO_FILE'}) {
-            &logr("[*] Could not create the named pipe " .
-                "\"$config{'PSAD_FIFO_FILE'}\"!\n" .
-                "[*] psad requires this file to exist!  Aborting " .
-                "install.\n");
-            die;
+
+    if ($install_syslog_fifo) {
+        unless (-e $config{'PSAD_FIFO_FILE'}) {
+            &logr("[+] Creating named pipe $config{'PSAD_FIFO_FILE'}\n");
+            unless (((system "$cmds{'mknod'} -m 600 " .
+                    "$config{'PSAD_FIFO_FILE'} p")>>8) == 0) {
+                &logr("[*] Could not create the named pipe " .
+                    "\"$config{'PSAD_FIFO_FILE'}\"!\n" .
+                    "[*] psad requires this file to exist!  Aborting install.\n");
+                die;
+            }
+            unless (-p $config{'PSAD_FIFO_FILE'}) {
+                &logr("[*] Could not create the named pipe " .
+                    "\"$config{'PSAD_FIFO_FILE'}\"!\n" .
+                    "[*] psad requires this file to exist!  Aborting " .
+                    "install.\n");
+                die;
+            }
         }
     }
 
     unless (-d $config{'PSAD_DIR'}) {
         &logr("[+] Creating $config{'PSAD_DIR'}\n");
-        mkdir $config{'PSAD_DIR'}, 0500;
+        &full_mkdir($config{'PSAD_DIR'}, 0700);
     }
+    unless (-d $config{'PSAD_LIBS_DIR'}) {
+        &logr("[+] Creating $config{'PSAD_LIBS_DIR'}\n");
+        &full_mkdir($config{'PSAD_LIBS_DIR'}, 0755);
+    }
+
     unless (-e $config{'FW_DATA_FILE'}) {
         &logr("[+] Creating $config{'FW_DATA_FILE'} file\n");
         open F, "> $config{'FW_DATA_FILE'}" or die "[*] Could not open ",
@@ -335,7 +377,7 @@ sub install() {
 
     unless (-d $USRSBIN_DIR) {
         &logr("[+] Creating $USRSBIN_DIR\n");
-        mkdir $USRSBIN_DIR,0755;
+        &full_mkdir($USRSBIN_DIR, 0755);
     }
     if (-d 'deps' and -d 'deps/whois') {
         &logr("[+] Compiling Marco d'Itri's whois client\n");
@@ -358,7 +400,7 @@ sub install() {
 
     ### install perl modules
     unless ($skip_module_install) {
-        for my $module (keys %required_perl_modules) {
+        for my $module (@ordered_modules) {
             &install_perl_module($module);
         }
     }
@@ -368,8 +410,7 @@ sub install() {
         &logr("[+] Installing Snort-2.3.3 signatures in " .
             "$config{'SNORT_RULES_DIR'}\n");
         unless (-d $config{'SNORT_RULES_DIR'}) {
-            mkdir $config{'SNORT_RULES_DIR'}, 0500
-                or die "[*] Could not create $config{'SNORT_RULES_DIR'}: $!";
+            &full_mkdir($config{'SNORT_RULES_DIR'}, 0700);
         }
 
         opendir D, 'deps/snort_rules' or die "[*] Could not open ",
@@ -407,7 +448,7 @@ sub install() {
     &logr("[+] Verifying compilation of fwcheck_psad.pl script:\n");
     unless (((system "$cmds{'perl'} -c fwcheck_psad.pl")>>8) == 0) {
         die "[*] fwcheck_psad.pl does not compile with \"perl -c\".  Download ",
-            "the latest sources from:\n\nhttp://www.cipherdyne.org/\n"
+            "the latest sources from:\n\nhttp://www.cipherdyne.org/"
             unless $skip_module_install;
     }
 
@@ -416,7 +457,7 @@ sub install() {
     &logr("[+] Verifying compilation of psad perl daemon:\n");
     unless (((system "$cmds{'perl'} -c psad")>>8) == 0) {
         die "[*] psad does not compile with \"perl -c\".  Download the",
-            " latest sources from:\n\nhttp://www.cipherdyne.org/\n"
+            " latest sources from:\n\nhttp://www.cipherdyne.org/"
             unless $skip_module_install;
     }
 
@@ -424,7 +465,7 @@ sub install() {
     &logr("[+] Verifying compilation of nf2csv script:\n");
     unless (((system "$cmds{'perl'} -c nf2csv")>>8) == 0) {
         die "[*] nf2csv does not compile with \"perl -c\".  Download ",
-            "the latest sources from:\n\nhttp://www.cipherdyne.org/\n"
+            "the latest sources from:\n\nhttp://www.cipherdyne.org/"
             unless $skip_module_install;
     }
 
@@ -464,7 +505,7 @@ sub install() {
 
     unless (-d $config{'PSAD_CONF_DIR'}) {
         &logr("[+] Creating $config{'PSAD_CONF_DIR'}\n");
-        mkdir $config{'PSAD_CONF_DIR'},0500;
+        &full_mkdir($config{'PSAD_CONF_DIR'}, 0700);
     }
 
     my $syslog_str = '';
@@ -509,8 +550,8 @@ sub install() {
     &perms_ownership($prod_file, 0600);
 
     ### install auto_dl, signatures, icmp_types, posf, and pf.os files
-    for my $filename qw(signatures icmp_types
-            posf auto_dl snort_rule_dl pf.os ip_options) {
+    for my $filename (qw(signatures icmp_types icmp6_types
+            posf auto_dl snort_rule_dl pf.os ip_options)) {
         my $file = $config{$file_vars{$filename}};
         if (-e $file) {
             &archive($file) unless $noarchive;
@@ -530,8 +571,8 @@ sub install() {
     }
 
     ### archive and remove legacy config files
-    for my $filename qw(kmsgsd.conf psadwatchd.conf alert.conf
-            fw_search.conf) {
+    for my $filename (qw(kmsgsd.conf psadwatchd.conf alert.conf
+            fw_search.conf)) {
         my $path = "$config{'PSAD_CONF_DIR'}/$filename";
         if (-e $path) {
             &archive($path);
@@ -545,7 +586,7 @@ sub install() {
         ### get email address(es)
         my $email_str = &query_email();
         if ($email_str) {
-            &put_string('EMAIL_ADDRESSES', $email_str,
+            &put_var('EMAIL_ADDRESSES', $email_str,
                 "$config{'PSAD_CONF_DIR'}/psad.conf");
         }
 
@@ -554,8 +595,8 @@ sub install() {
         ### admin may have configured the firewall to use a logging prefix
         ### of "Audit" or something else other than the default string
         ### "DROP".
-        my $fw_search_aref = &get_fw_search_strings();
-        if ($fw_search_aref) {
+        my $fw_search_ar = &get_fw_search_strings();
+        if ($fw_search_ar) {
             open F, "< $config{'PSAD_CONF_DIR'}/psad.conf"
                 or die "[*] Could not open ",
                     "$config{'PSAD_CONF_DIR'}/psad.conf: $!";
@@ -566,7 +607,7 @@ sub install() {
                     "$config{'PSAD_CONF_DIR'}/psad.conf.tmp: $!";
             for my $line (@lines) {
                 if ($line =~ /^\s*FW_MSG_SEARCH\s/) {
-                    for my $fw_str (@$fw_search_aref) {
+                    for my $fw_str (@$fw_search_ar) {
                         &logr(qq{[+] Setting FW_MSG_SEARCH to "$fw_str" } .
                             "in $config{'PSAD_CONF_DIR'}/psad.conf\n");
                         printf T "%-28s%s;\n", 'FW_MSG_SEARCH', $fw_str;
@@ -588,7 +629,7 @@ sub install() {
         ### see if the admin would like to have psad send info to
         ### DShield
         if (&query_dshield()) {
-            &put_string('ENABLE_DSHIELD_ALERTS', 'Y',
+            &put_var('ENABLE_DSHIELD_ALERTS', 'Y',
                 "$config{'PSAD_CONF_DIR'}/psad.conf");
         }
 
@@ -599,7 +640,7 @@ sub install() {
     }
 
     if ($install_syslog_fifo) {
-        &put_string('SYSLOG_DAEMON', $syslog_str,
+        &put_var('SYSLOG_DAEMON', $syslog_str,
             "$config{'PSAD_CONF_DIR'}/psad.conf");
 
         if ($syslog_str ne 'ulogd') {
@@ -704,6 +745,7 @@ sub install() {
     &install_manpage('nf2csv.1');
 
     my $init_file = '';
+    my $installed_init_script = 0;
     if ($distro eq 'redhat') {
         $init_file = 'init-scripts/psad-init.redhat';
     } elsif ($distro eq 'fedora') {
@@ -714,12 +756,13 @@ sub install() {
         $init_file = 'init-scripts/psad-init.generic';
     }
 
-    if ($init_dir) {
+    if ($init_dir and &is_root()) {
         &logr("[+] Copying $init_file -> ${init_dir}/$init_name\n");
         copy $init_file, "${init_dir}/$init_name" or die "[*] Could not copy ",
             "$init_file -> ${init_dir}/$init_name: $!";
         &perms_ownership("${init_dir}/$init_name", 0744);
         &enable_psad_at_boot($distro);
+        $installed_init_script = 1;
     }
 
     &logr("\n========================================================\n");
@@ -732,11 +775,14 @@ sub install() {
     } else {
         &logr("\n[+] psad has been installed.\n");
     }
-    if ($init_dir) {
-        &logr("\n[+] To start psad, run \"${init_dir}/psad start\"\n");
-    } else {
-        &logr("\n[+] To start psad, run ${USRSBIN_DIR}/psad\"\n");
+    if ($installed_init_script) {
+        if ($init_dir) {
+            &logr("\n[+] To start psad, run \"${init_dir}/psad start\"\n");
+        } else {
+            &logr("\n[+] To start psad, run ${USRSBIN_DIR}/psad\"\n");
+        }
     }
+
     return;
 }
 
@@ -757,6 +803,26 @@ sub import_config() {
         }
     }
     close C;
+
+    ### see if the install root is the same as the default in psad.conf and
+    ### update if not
+    if ($install_root ne '/') {
+        $install_root = getcwd() . "/$install_root"
+            unless $install_root =~ m|^/|;
+        $config{'INSTALL_ROOT'} = $install_root;
+        $USRSBIN_DIR = $config{'INSTALL_ROOT'} . $USRSBIN_DIR;
+        $USRBIN_DIR  = $config{'INSTALL_ROOT'} . $USRBIN_DIR;
+
+        &put_var('INSTALL_ROOT', $install_root, $psad_conf_file);
+    }
+
+    for my $dir ($install_root, $USRSBIN_DIR, $USRBIN_DIR) {
+        &full_mkdir($dir, 0755) unless -d $dir;
+    }
+
+    if ($install_test_dir) {
+        &full_mkdir($init_dir, 0755) unless -d $init_dir;
+    }
 
     ### resolve internal vars within variable values
     &expand_vars();
@@ -785,7 +851,11 @@ sub expand_vars() {
                     die "[*] sub-ver $sub_var not allowed within same ",
                         "variable $var" if $sub_var eq $var;
                     if (defined $config{$sub_var}) {
-                        $val =~ s|\$$sub_var|$config{$sub_var}|;
+                        if ($sub_var eq 'INSTALL_ROOT' and $config{$sub_var} eq '/') {
+                            $val =~ s|\$$sub_var||;
+                        } else {
+                            $val =~ s|\$$sub_var|$config{$sub_var}|;
+                        }
                         $hr->{$var} = $val;
                     } else {
                         die "[*] sub-var \"$sub_var\" not defined in ",
@@ -800,12 +870,12 @@ sub expand_vars() {
 }
 
 sub required_vars() {
-    my @vars = qw(
+    my @vars = (qw(
         INSTALL_LOG_FILE PSAD_DIR PSAD_RUN_DIR PSAD_LIBS_DIR
         SIG_UPDATE_URL PSAD_FIFO_DIR PSAD_FIFO_FILE SNORT_RULES_DIR
         IP_OPTS_FILE SIGS_FILE AUTO_DL_FILE SNORT_RULE_DL_FILE
         POSF_FILE P0F_FILE IP_OPTS_FILE FW_DATA_FILE
-    );
+    ));
     for my $var (@vars) {
         die "[*] Missing required var: $var in $psad_conf_file"
             unless defined $config{$var};
@@ -1000,11 +1070,6 @@ sub install_perl_module() {
     }
 
     if ($install_module) {
-        unless (-d $config{'PSAD_LIBS_DIR'}) {
-            &logr("[+] Creating $config{'PSAD_LIBS_DIR'}\n");
-            mkdir $config{'PSAD_LIBS_DIR'}, 0755 or
-                die "[*] Could not mkdir $config{'PSAD_LIBS_DIR'}: $!";
-        }
         &logr("[+] Installing the $mod_name $version perl " .
             "module in $config{'PSAD_LIBS_DIR'}/\n");
         my $mod_dir = $required_perl_modules{$mod_name}{'mod-dir'};
@@ -1013,19 +1078,22 @@ sub install_perl_module() {
         unless (-e 'Makefile.PL') {
             die "[*] Your $mod_name source directory appears to be incomplete!\n",
                 "    Download the latest sources from ",
-                "http://www.cipherdyne.org/\n";
+                "http://www.cipherdyne.org/";
         }
+
+        $ENV{'PERL5LIB'} = $config{'PSAD_LIBS_DIR'};  ### for module dependencies
         system "$cmds{'make'} clean"
             if -e 'Makefile' or -e 'makefile' or -e 'GNUmakefile';
         system "$cmds{'perl'} Makefile.PL PREFIX=$config{'PSAD_LIBS_DIR'} " .
             "LIB=$config{'PSAD_LIBS_DIR'}";
-        system $cmds{'make'};
+        system "$cmds{'make'}";
 #        system "$cmds{'make'} test";
         system "$cmds{'make'} install";
         chdir $src_dir or die "[*] Could not chdir $src_dir: $!";
 
         print "\n\n";
     }
+
     return;
 }
 
@@ -1045,7 +1113,7 @@ sub set_home_net() {
 #    }
     ### if we make it here, then the admin wants to completely enumerate the
     ### HOME_NET var, so we have to disable ENABLE_INTF_LOCAL_NETS
-#    &put_string('ENABLE_INTF_LOCAL_NETS', 'N',
+#    &put_var('ENABLE_INTF_LOCAL_NETS', 'N',
 #        "$config{'PSAD_CONF_DIR'}/psad.conf");
 
     ### get all interfaces; even those that are down since they may
@@ -1099,6 +1167,7 @@ sub set_home_net() {
     for my $intf (keys %connected_subnets) {
         &logr("      $intf -> $connected_subnets{$intf}\n");
     }
+    my $ans_file_str = 'Specify HOME_NET subnets:';
     my $str =
 "\n    Specify which subnets are part of your internal network.  Note that\n" .
 "    you can correct anything you enter here by editing the \"HOME_NET\"\n" .
@@ -1108,23 +1177,29 @@ sub set_home_net() {
 "    in CIDR notation: 192.168.10.0/24 (preferrable), or regular notation:\n" .
 "    192.168.10.0/255.255.255.0\n\n    End with a \".\" on a line by itself.\n\n";
     &logr($str);
-    my $ans = '';
-    while ($ans !~ /^\s*\.\s*$/) {
-        &logr("    Subnet: ");
-        $ans = <STDIN>;
-        chomp $ans;
-        if ($ans =~ m|^\s*($ip_re/\d+)\s*$|) {
-            ### hard to test this directly without ipv4_network()
-            ### and this module may not be installed, so just use it.
-            $home_net_str .= "$1, ";
-        } elsif ($ans =~ m|^\s*($ip_re/$ip_re)\s*$|) {
-            $home_net_str .= "$1, ";
-        } elsif ($ans !~ /^\s*\.\s*$/) {
-            &logr("[-] Invalid subnet \"$ans\"\n");
+    if ($use_answers and defined $answers{$ans_file_str}) {
+        $home_net_str = $answers{$ans_file_str};
+        print "$answers{$ans_file_str}\n";
+    } else {
+        my $ans = '';
+        while ($ans !~ /^\s*\.\s*$/) {
+            &logr("    Subnet: ");
+            $ans = <STDIN>;
+            chomp $ans;
+            if ($ans =~ m|^\s*($ip_re/\d+)\s*$|) {
+                ### hard to test this directly without ipv4_network()
+                ### and this module may not be installed, so just use it.
+                $home_net_str .= "$1, ";
+            } elsif ($ans =~ m|^\s*($ip_re/$ip_re)\s*$|) {
+                $home_net_str .= "$1, ";
+            } elsif ($ans !~ /^\s*\.\s*$/) {
+                &logr("[-] Invalid subnet \"$ans\"\n");
+            }
         }
+        $home_net_str =~ s/\,\s*$//;
+        &put_answer_file_value($ans_file_str, $home_net_str);
     }
-    $home_net_str =~ s/\,\s*$//;
-    &put_string('HOME_NET', $home_net_str, $file);
+    &put_var('HOME_NET', $home_net_str, $file);
     return;
 }
 
@@ -1202,7 +1277,7 @@ sub set_hostname() {
     } else {
         die "[*] Your source directory appears to be incomplete!  $file ",
             "is missing.\n    Download the latest sources from ",
-            "http://www.cipherdyne.org/\n";
+            "http://www.cipherdyne.org/";
     }
     return;
 }
@@ -1214,7 +1289,7 @@ sub set_hostname() {
 sub check_hostname() {
     my $file = shift;
 
-    open F, "< $file" or die "[*] Could not open $file: $!\n";
+    open F, "< $file" or die "[*] Could not open $file: $!";
     my @lines = <F>;
     close F;
     for my $line (@lines) {
@@ -1238,7 +1313,7 @@ sub check_hostname() {
 sub append_fifo_syslog_ng() {
     my $syslog_conf = shift;
     open RS, "< $syslog_conf" or
-        die "[*] Unable to open $syslog_conf: $!\n";
+        die "[*] Unable to open $syslog_conf: $!";
     my @slines = <RS>;
     close RS;
 
@@ -1258,7 +1333,7 @@ sub append_fifo_syslog_ng() {
         &archive($syslog_conf);
 
         open SYSLOGNG, ">> $syslog_conf" or
-            die "[*] Unable to open $syslog_conf: $!\n";
+            die "[*] Unable to open $syslog_conf: $!";
         print SYSLOGNG "\n",
             qq|source psadsrc { unix-stream("/dev/log"); |,
             qq|internal(); pipe("/proc/kmsg"); };\n|,
@@ -1273,10 +1348,22 @@ sub append_fifo_syslog_ng() {
     return;
 }
 
+sub import_answers() {
+    die "[*] $answers_file does not exist" unless -e $answers_file;
+    open F, "< $answers_file" or die "[*] Could not open $answers_file: $!";
+    while (<F>) {
+        if (/^(.*?:)\s+(.*);/) {
+            $answers{$1} = $2;
+        }
+    }
+    close F;
+    return;
+}
+
 sub config_metalog() {
     my $syslog_conf = shift;
     open RS, "< $syslog_conf" or
-        die "[*] Unable to open $syslog_conf: $!\n";
+        die "[*] Unable to open $syslog_conf: $!";
     my @lines = <RS>;
     close RS;
 
@@ -1325,18 +1412,50 @@ sub config_metalog() {
 
 sub query_yes_no() {
     my ($msg, $style) = @_;
-    my $ans = '';
-    while ($ans ne 'y' and $ans ne 'n') {
+
+    my $ans_file_str = $msg;
+    $ans_file_str =~ s|\n| |g;
+    $ans_file_str =~ s|\W| |g;
+    $ans_file_str =~ s|\s+| |g;
+    $ans_file_str =~ s|^\s+||;
+    $ans_file_str =~ s|\s+$||;
+    $ans_file_str =~ s|\sy\sn||;
+    $ans_file_str .= ':' unless $ans_file_str =~ m|\:$|;
+
+    if ($use_answers and defined $answers{$ans_file_str}) {
         &logr($msg);
-        $ans = lc(<STDIN>);
-        if ($style == $ACCEPT_YES_DEFAULT) {
-            return 1 if $ans eq "\n";
-        } elsif ($style == $ACCEPT_NO_DEFAULT) {
-            return 0 if $ans eq "\n";
+        print "$answers{$ans_file_str}\n";
+        if (lc($answers{$ans_file_str}) eq 'y') {
+            return 1;
+        } else {
+            return 0;
         }
-        chomp $ans;
+    } else {
+        my $ans = '';
+        while ($ans ne 'y' and $ans ne 'n') {
+            &logr($msg);
+            $ans = lc(<STDIN>);
+            if ($style == $ACCEPT_YES_DEFAULT) {
+                if ($ans eq "\n") {
+                    &put_answer_file_value($ans_file_str, 'y');
+                    return 1;
+                }
+            } elsif ($style == $ACCEPT_NO_DEFAULT) {
+                if ($ans eq "\n") {
+                    &put_answer_file_value($ans_file_str, 'n');
+                    return 0;
+                }
+            }
+            chomp $ans;
+        }
+        if ($ans eq 'y') {
+            &put_answer_file_value($ans_file_str, 'y');
+            return 1;
+        } else {
+            &put_answer_file_value($ans_file_str, 'n');
+            return 0;
+        }
     }
-    return 1 if $ans eq 'y';
     return 0;
 }
 
@@ -1425,7 +1544,7 @@ sub append_fifo_syslog() {
         }
         &archive($syslog_conf);
         open SYSLOG, "> $syslog_conf" or
-            die "[*] Unable to open $syslog_conf: $!\n";
+            die "[*] Unable to open $syslog_conf: $!";
         for my $line (@slines) {
             unless ($line =~ /psadfifo/) {
                 print SYSLOG $line;
@@ -1593,6 +1712,9 @@ sub scrub_prefix_ctr() {
 }
 
 sub check_old_psad_installation() {
+
+    return unless &is_root();
+
     my $old_install_dir = '/usr/local/bin';
     if (-e "${old_install_dir}/psad") {
         move "${old_install_dir}/psad", "${USRSBIN_DIR}/psad" or die "[*] ",
@@ -1644,10 +1766,15 @@ sub get_distro() {
 
 sub perms_ownership() {
     my ($file, $perm_value) = @_;
+
     chmod $perm_value, $file or die "[*] Could not ",
         "chmod($perm_value, $file): $!";
+
+    return unless &is_root();
+
     ### root (maybe should take the group assignment out)
     chown 0, 0, $file or die "[*] Could not chown 0,0,$file: $!";
+
     return;
 }
 
@@ -1666,7 +1793,7 @@ sub get_fw_search_strings() {
 
 
         ### we are only searching for specific iptables log prefixes
-        &put_string('FW_SEARCH_ALL', 'N',
+        &put_var('FW_SEARCH_ALL', 'N',
             "$config{'PSAD_CONF_DIR'}/psad.conf");
 
     my $str =
@@ -1683,22 +1810,32 @@ sub get_fw_search_strings() {
         &logr("    Add as many search strings as you like; " .
             "each on its own line.\n\n");
         &logr("    End with a \".\" on a line by itself.\n\n");
-        my $ans = '';
-        while ($ans !~ /^\s*\.\s*$/) {
-            &logr("    Enter string (i.e. \"Audit\"):  ");
-            $ans = <STDIN>;
-            chomp $ans;
-            if ($ans =~ /\"/) {
-                &logr("[-] Quotes will be removed from FW search string: $ans\n");
-                $ans =~ s/\"//g;
-            }
-            if ($ans =~ /\S/) {
-                if ($ans !~ /^\s*\.\s*$/) {
-                    push @fw_search_strings, $ans;
+        my $ans_file_str = 'FW search strings:';
+        if ($use_answers and defined $answers{$ans_file_str}) {
+            @fw_search_strings = split /\s*,\s*/, $answers{$ans_file_str};
+            print "$answers{$ans_file_str}\n";
+        } else {
+            my $ans = '';
+            my $str = '';
+            while ($ans !~ /^\s*\.\s*$/) {
+                &logr("    Enter string (i.e. \"Audit\"):  ");
+                $ans = <STDIN>;
+                chomp $ans;
+                if ($ans =~ /\"/) {
+                    &logr("[-] Quotes will be removed from FW search string: $ans\n");
+                    $ans =~ s/\"//g;
                 }
-            } else {
-                &logr("[-] Invalid string\n");
+                if ($ans =~ /\S/) {
+                    if ($ans !~ /^\s*\.\s*$/) {
+                        $str .= "$ans, ";
+                        push @fw_search_strings, $ans;
+                    }
+                } else {
+                    &logr("[-] Invalid string\n");
+                }
             }
+            $str =~ s/\,\s*$//;
+            &put_answer_file_value($ans_file_str, $str);
         }
         &logr("\n    All firewall search strings used by psad are located " .
             "in the psad config file:\n    $config{'PSAD_CONF_DIR'}/psad.conf\n");
@@ -1748,18 +1885,27 @@ sub query_email() {
         &logr("    You can enter as many email addresses as you like; " .
             "each on its own line.\n\n");
         &logr("    End with a \".\" on a line by itself.\n\n");
-        my $ans = '';
-        while ($ans !~ /^\s*\.\s*$/) {
-            &logr("    Email Address: ");
-            $ans = <STDIN>;
-            chomp $ans;
-            if ($ans =~ m|^\s*(\S+\@\S+)$|) {
-                $email_str .= "$1, ";
-            } elsif ($ans !~ /^\s*\.\s*$/) {
-                &logr("[-] Invalid email address \"$ans\"\n");
+
+        my $ans_file_str = 'Email addresses:';
+
+        if ($use_answers and defined $answers{$ans_file_str}) {
+            $email_str = $answers{$ans_file_str};
+            print "$answers{$ans_file_str}\n";
+        } else {
+            my $ans = '';
+            while ($ans !~ /^\s*\.\s*$/) {
+                &logr("    Email Address: ");
+                $ans = <STDIN>;
+                chomp $ans;
+                if ($ans =~ m|^\s*(\S+\@\S+)$|) {
+                    $email_str .= "$1, ";
+                } elsif ($ans !~ /^\s*\.\s*$/) {
+                    &logr("[-] Invalid email address \"$ans\"\n");
+                }
             }
+            $email_str =~ s/\,\s*$//;
+            &put_answer_file_value($ans_file_str, $email_str);
         }
-        $email_str =~ s/\,\s*$//;
     }
     return $email_str;
 }
@@ -1767,53 +1913,93 @@ sub query_email() {
 sub query_syslog() {
     &logr("\n[+] psad supports the syslogd, rsyslogd, syslog-ng, ulogd, and\n" .
         "    metalog logging daemons.  Which system logger is running?\n\n");
-    my $ans = '';
-    while ($ans ne 'syslogd' and $ans ne 'rsyslogd' and
-            $ans ne 'syslog-ng' and $ans ne 'ulogd' and $ans ne 'metalog') {
-        &logr("    syslogd / rsyslogd / syslog-ng / ulogd / metalog? [syslogd] ");
-        $ans = <STDIN>;
-        if ($ans eq "\n") {  ### allow default to take over
-            $ans = 'syslogd';
-        }
-        $ans =~ s/\s*//g;
 
-        if ($ans eq 'syslogd') {
-            ### allow command line --syslog-conf arg to take over
-            $syslog_conf = '/etc/syslog.conf' unless $syslog_conf;
-        } elsif ($ans eq 'rsyslogd') {
-            ### allow command line --syslog-conf arg to take over
-            $syslog_conf = '/etc/rsyslog.conf' unless $syslog_conf;
-        } elsif ($ans eq 'syslog-ng') {
-            ### allow command line --syslog-conf arg to take over
-            $syslog_conf = '/etc/syslog-ng/syslog-ng.conf' unless $syslog_conf;
-        } elsif ($ans eq 'metalog') {
-            ### allow command line --syslog-conf arg to take over
-            $syslog_conf = '/etc/metalog/metalog.conf' unless $syslog_conf;
-        }
-        if ($ans ne 'ulogd' and $syslog_conf and not -e $syslog_conf) {
-            if (-e '/etc/rsyslog.conf') {
-                warn "[-] It looks like /etc/rsyslog.conf exists, ",
-                    "did you mean rsyslog?\n";
+    my $ans = '';
+    my $ans_file_str = 'System logger:';
+
+    if ($use_answers and defined $answers{$ans_file_str}) {
+        $ans = $answers{$ans_file_str};
+        print "$answers{$ans_file_str}\n";
+    } else {
+        while ($ans ne 'syslogd' and $ans ne 'rsyslogd' and
+                $ans ne 'syslog-ng' and $ans ne 'ulogd' and $ans ne 'metalog') {
+            &logr("    syslogd / rsyslogd / syslog-ng / ulogd / metalog? [syslogd] ");
+            $ans = <STDIN>;
+            if ($ans eq "\n") {  ### allow default to take over
+                $ans = 'syslogd';
             }
-            die
-"[*] The config file $syslog_conf does not exist. Re-run install.pl\n",
-"    with the --syslog-conf argument to specify the path to the syslog\n",
-"    daemon config file.\n";
+            $ans =~ s/\s*//g;
+
+            if ($ans eq 'syslogd') {
+                ### allow command line --syslog-conf arg to take over
+                $syslog_conf = '/etc/syslog.conf' unless $syslog_conf;
+            } elsif ($ans eq 'rsyslogd') {
+                ### allow command line --syslog-conf arg to take over
+                $syslog_conf = '/etc/rsyslog.conf' unless $syslog_conf;
+            } elsif ($ans eq 'syslog-ng') {
+                ### allow command line --syslog-conf arg to take over
+                $syslog_conf = '/etc/syslog-ng/syslog-ng.conf' unless $syslog_conf;
+            } elsif ($ans eq 'metalog') {
+                ### allow command line --syslog-conf arg to take over
+                $syslog_conf = '/etc/metalog/metalog.conf' unless $syslog_conf;
+            }
+            if ($ans ne 'ulogd' and $syslog_conf and not -e $syslog_conf) {
+                if (-e '/etc/rsyslog.conf') {
+                    warn "[-] It looks like /etc/rsyslog.conf exists, ",
+                        "did you mean rsyslog?\n";
+                }
+                die
+    "[*] The config file $syslog_conf does not exist. Re-run install.pl\n",
+    "    with the --syslog-conf argument to specify the path to the syslog\n",
+    "    daemon config file.";
+            }
         }
+        die "[-] Invalid syslog daemon \"$ans\""
+            unless ($ans and
+                ($ans eq 'syslogd'
+                or $ans eq 'rsyslogd'
+                or $ans eq 'syslog-ng'
+                or $ans eq 'ulogd'
+                or $ans eq 'metalog'));
+        print "\n";
+        &put_answer_file_value($ans_file_str, $ans);
     }
-    die "[-] Invalid syslog daemon \"$ans\"\n"
-        unless ($ans and
-            ($ans eq 'syslogd'
-            or $ans eq 'rsyslogd'
-            or $ans eq 'syslog-ng'
-            or $ans eq 'ulogd'
-            or $ans eq 'metalog'));
-    print "\n";
     return $ans;
 }
 
-sub put_string() {
+sub put_answer_file_value() {
+    my ($answer_str, $value) = @_;
+
+    return if $no_write_answers;
+
+    my @lines = ();
+
+    if (-e $answers_file) {
+        open F, "< $answers_file" or die "[*] Could not open $answers_file: $!";
+        @lines = <F>;
+        close F;
+    }
+
+    my $found_str = 0;
+    open F, "> $answers_file" or die "[*] Could not open $answers_file: $!";
+    for my $line (@lines) {
+        if ($line =~ /^$answer_str\s+.*;/) {
+            print F "$answer_str        $value;\n";
+            $found_str = 1;
+        } else {
+            print F $line;
+        }
+    }
+    unless ($found_str) {
+        print F "$answer_str        $value;\n";
+    }
+    close F;
+    return;
+}
+
+sub put_var() {
     my ($var, $value, $file) = @_;
+
     open RF, "< $file" or die "[*] Could not open $file: $!";
     my @lines = <RF>;
     close RF;
@@ -1845,6 +2031,7 @@ sub archive() {
     }
     &logr("[+] Archiving $file -> $config{'CONF_ARCHIVE_DIR'}/${base}1.gz\n");
     unlink "${base}1.gz" if -e "${base}1.gz";
+
     ### move $file into the archive directory
     copy $file, "${base}1" or die "[*] Could not copy ",
         "$file -> ${base}1: $!";
@@ -1856,6 +2043,8 @@ sub archive() {
 
 sub enable_psad_at_boot() {
     my $distro = shift;
+
+    return unless &is_root();
 
     if (&query_yes_no("[+] Enable psad at boot time ([y]/n)?  ",
                 $ACCEPT_YES_DEFAULT)) {
@@ -1888,6 +2077,7 @@ sub enable_psad_at_boot() {
 
 ### check paths to commands and attempt to correct if any are wrong.
 sub check_commands() {
+
     CMD: for my $cmd (keys %cmds) {
         next CMD if defined $exclude_cmds{$cmd};
         unless (-x $cmds{$cmd}) {
@@ -1910,22 +2100,28 @@ sub check_commands() {
                 }
                 die "\n[*] Could not find $cmd anywhere!!!  ",
                     "Please edit the config section to include the path to ",
-                    "$cmd.\n";
+                    "$cmd.";
             }
         }
         unless (-x $cmds{$cmd}) {
+            return unless &is_root();
             die "\n[*] $cmd is located at ",
-                "$cmds{$cmd} but is not executable by uid: $<\n";
+                "$cmds{$cmd} but is not executable by uid: $<";
         }
     }
     return;
 }
 
+sub is_root() {
+    return 1 if $< == 0 and $> == 0;
+    return 0;
+}
+
 sub install_manpage() {
     my $manpage = shift;
 
-    my $name;
-    my $section;
+    my $name    = '';
+    my $section = '';
 
     if ($manpage =~ m|(\w+)\.(\d)|) {
         $name = $1;
@@ -1935,8 +2131,10 @@ sub install_manpage() {
     }
 
     ### remove old man page
-    unlink "/usr/local/man/man$section/${manpage}" if
-        (-e "/usr/local/man/man$section/${manpage}");
+    if (&is_root()) {
+        unlink "/usr/local/man/man$section/${manpage}" if
+            -e "/usr/local/man/man$section/${manpage}";
+    }
 
     ### default location to put the psad man page, but check with
     ### /etc/man.config
@@ -1980,7 +2178,12 @@ sub install_manpage() {
             }
         }
     }
-    mkdir $mpath, 0755 unless -d $mpath;
+
+    if ($install_root ne '/') {
+        $mpath = $config{'INSTALL_ROOT'} . $mpath;
+    }
+
+    &full_mkdir($mpath, 0755);
     my $mfile = "${mpath}/${manpage}";
     &logr("[+] Installing $manpage man page at $mfile\n");
     copy $manpage, $mfile or die "[*] Could not copy $manpage to ",
@@ -1990,6 +2193,23 @@ sub install_manpage() {
     ### remove the old one so gzip doesn't prompt us
     unlink "${mfile}.gz" if -e "${mfile}.gz";
     system "$cmds{'gzip'} $mfile";
+    return;
+}
+
+sub full_mkdir() {
+    my ($dir, $perms) = @_;
+
+    my @dirs = split /\//, $dir;
+    my $path = $dirs[0];
+    shift @dirs;
+    for my $d (@dirs) {
+        next unless $d and $d =~ /\S/;
+        $path .= "/$d";
+        unless (-d $path) {
+            printf "[+] mkdir $path, %o\n", $perms;
+            mkdir $path, $perms or die "[*] Could not mkdir($path): $!";
+        }
+    }
     return;
 }
 
@@ -2020,6 +2240,9 @@ sub update_command_paths() {
             my $cmd    = $1;
             my $spaces = $2;
             my $path   = $3;
+            if ($path =~ /\$INSTALL_ROOT/) {
+                $path =~ s|\$INSTALL_ROOT|$install_root|;
+            }
             unless (-e $path and -x $path) {
                 ### the command is not at this path, try to find it
                 my $cmd_minor_name = $cmd;
@@ -2078,18 +2301,10 @@ sub get_runlevel() {
 ### logging subroutine that handles multiple filehandles
 sub logr() {
     my $msg = shift;
-    for my $file (@LOGR_FILES) {
-        if ($file eq *STDOUT) {
-            print STDOUT $msg;
-        } elsif ($file eq *STDERR) {
-            print STDERR $msg;
-        } else {
-            open F, ">> $file" or die "[*] Could not open ",
-                "$file: $!";
-            print F $msg;
-            close F;
-        }
-    }
+
+    print STDOUT $msg;
+    push @installation_lines, $msg;
+
     return;
 }
 
@@ -2111,7 +2326,7 @@ Usage: install.pl [options]
     -p, --path-update            - Run path update code regardless of whether
                                    a previous config is being merged.
     -S, --Skip-mod-install       - Do not install any perl modules.
-    -s  <file>                   - Specify path to syslog.conf file.
+    -s, --syslog-conf <file>     - Specify path to syslog.conf file.
     -c, --config <file>          - Specify alternate path to psad.conf from
                                    which default installation paths are
                                    derived.
@@ -2123,6 +2338,17 @@ Usage: install.pl [options]
                                    (this is not usually necessary since
                                    the default is to enable
                                    ENABLE_SYSLOG_FILE).
+    --install-root <dir>         - Install psad at a custom path (analogous
+                                   to './configure --prefix=/dir').
+    --install-test-dir           - Install psad in test/psad-install for
+                                   test suite.
+    -U, --Use-answers            - Apply answers to installation queries
+                                   from the file $answers_file.
+    -a, --answers-file <file>    - Specify path to the answers file.
+    --no-write-answers           - By default the install.pl script
+                                   records installation query answers to
+                                   the file $answers_file, but this option
+                                   disables this behavior.
     -r, --runlevel <N>           - Specify the current system runlevel.
     --no-rm-lib-dir              - Do not remove the /usr/lib/psad/
                                    directory before installing psad.

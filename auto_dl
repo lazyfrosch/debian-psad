@@ -12,8 +12,6 @@
 #
 #############################################################################
 #
-# $Id: auto_dl 1480 2005-11-23 15:30:42Z mbr $
-#
 
 #  <IP address>  <danger level>  <optional protocol>/<optional ports>;
 #

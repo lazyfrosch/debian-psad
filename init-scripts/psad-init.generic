@@ -8,7 +8,6 @@
 # pidfile: /var/run/psad.pid
 # config: /etc/psad/psad.conf
 #
-# $Id: psad-init.generic 1211 2004-10-10 20:44:52Z mbr $
 
 restart() {
     $0 stop

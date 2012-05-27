@@ -10,8 +10,6 @@
 #
 ############################################################################
 #
-# $Id: ip_options 1857 2006-12-19 00:41:44Z mbr $
-#
 
 #  <option value> <length (-1 for variable)> <ipopts argument> <description>
 0    1   eol         End of options list
