@@ -13,7 +13,7 @@
 #
 # Credits: (see the CREDITS file bundled with the psad sources.)
 #
-# Copyright (C) 1999-2007 Michael Rash (mbr@cipherdyne.org)
+# Copyright (C) 1999-2012 Michael Rash (mbr@cipherdyne.org)
 #
 # License (GNU Public License):
 #
@@ -29,8 +29,6 @@
 #
 ###############################################################################
 #
-# $Id: fwcheck_psad.pl 2293 2010-07-12 01:05:46Z mbr $
-#
 
 use Getopt::Long 'GetOptions';
 use strict;
@@ -40,18 +38,22 @@ my $config_file  = '/etc/psad/psad.conf';
 
 ### config hash
 my %config = ();
+my $override_config_str = '';
 
 ### commands hash
-my %cmds;
+my %cmds = ();
 
 ### fw search string array
 my @fw_search = ();
 
 my $help = 0;
+my $test_mode = 0;
 my $fw_analyze = 0;
 my $fw_file    = '';
 my $fw_search_all = 1;
 my $no_fw_search_all = 0;
+my $log_and_drop_table = 'filter';
+my $enable_ipv6 = 0;
 my $psad_lib_dir = '';
 
 &usage(1) unless (GetOptions(
@@ -64,6 +66,8 @@ my $psad_lib_dir = '';
     'no-fw-search-all' => \$no_fw_search_all, # looking for specific log
                                               # prefixes
     'Lib-dir=s'   => \$psad_lib_dir,# Specify path to psad lib directory.
+    'Override-config=s' => \$override_config_str,
+    'test-mode'   => \$test_mode,   # Used by the test suite.
     'help'        => \$help,        # Display help.
 ));
 &usage(0) if $help;
@@ -71,7 +75,7 @@ my $psad_lib_dir = '';
 $fw_search_all = 0 if $no_fw_search_all;
 
 ### Everthing after this point must be executed as root.
-$< == 0 && $> == 0 or
+$< == 0 and $> == 0 or
     die '[*] fwcheck_psad.pl: You must be root (or equivalent ',
         "UID 0 account) to execute fwcheck_psad.pl!  Exiting.\n";
 
@@ -80,8 +84,13 @@ if ($fw_file) {
         unless -e $fw_file;
 }
 
+### import any override config files first
+&import_override_configs() if $override_config_str;
+
 ### import psad.conf
 &import_config($config_file);
+
+$enable_ipv6 = 1 if $config{'ENABLE_IPV6_DETECTION'} eq 'Y';
 
 ### import FW_MSG_SEARCH strings
 &import_fw_search($config_file);
@@ -122,20 +131,28 @@ sub fw_check() {
     my $send_alert = 0;
 
     my $forward_chain_rv = 1;
-    my $input_chain_rv = &ipt_chk_chain('INPUT');
-
+    my $input_chain_rv = &ipt_chk_chain('INPUT', $cmds{'iptables'});
     unless ($input_chain_rv) {
-        &print_fw_help('INPUT');
+        &print_fw_help('INPUT', $cmds{'iptables'});
         $send_alert = 1;
+    }
+
+    if ($enable_ipv6) {
+        my $tmp_rv = &ipt_chk_chain('INPUT', $cmds{'ip6tables'});
+        unless ($tmp_rv) {
+            &print_fw_help('INPUT', $cmds{'ip6tables'});
+            $send_alert = 1;
+            $input_chain_rv = 0;
+        }
     }
 
     ### we don't always have more than one interface or forwarding
     ### turned on, so we only check the FORWARD iptables chain if we
     ### do and we have multiple interfaces on the box.
     if (&check_forwarding()) {
-        $forward_chain_rv = &ipt_chk_chain('FORWARD');
+        $forward_chain_rv = &ipt_chk_chain('FORWARD', $cmds{'iptables'});
         unless ($forward_chain_rv) {
-            &print_fw_help('FORWARD');
+            &print_fw_help('FORWARD', $cmds{'iptables'});
             $send_alert = 1;
         }
     }
@@ -147,14 +164,14 @@ sub fw_check() {
 "    it is possible your firewall config is compatible with psad anyway.\n";
         }
 
-        unless ($config{'ALERTING_METHODS'} =~ /no.?e?mail/i) {
+        unless ($config{'ALERTING_METHODS'} =~ /no.?e?mail/i or $test_mode) {
             &send_mail("[psad-status] firewall setup warning on " .
                 "$config{'HOSTNAME'}!", $config{'FW_CHECK_FILE'},
                 $config{'EMAIL_ADDRESSES'},
                 $cmds{'mail'}
             );
         }
-        if ($fw_analyze) {
+        if ($fw_analyze and not $test_mode) {
             print "[-] Errors found in firewall config.\n";
             print "    emailed to ",
                 "$config{'EMAIL_ADDRESSES'}\n";
@@ -173,15 +190,15 @@ sub fw_check() {
         print "[+] Results in $config{'FW_CHECK_FILE'}\n",
             "[+] Exiting.\n";
     }
-    return $forward_chain_rv && $input_chain_rv;
+    return $forward_chain_rv and $input_chain_rv;
 }
 
 sub print_fw_help() {
-    my $chain = shift;
+    my ($chain, $ipt_bin) = @_;
     print FWCHECK
-"[-] You may just need to add a default logging rule to the $chain chain on\n",
-"    $config{'HOSTNAME'}.  For more information, see the file \"FW_HELP\" in\n",
-"    the psad sources directory or visit:\n\n",
+"[-] You may just need to add a default logging rule to the $ipt_bin\n",
+"    '$log_and_drop_table' '$chain' chain on $config{'HOSTNAME'}.  For more information,\n",
+"    see the file \"FW_HELP\" in the psad sources directory or visit:\n\n",
 "    http://www.cipherdyne.org/psad/docs/fwconfig.html\n\n";
     return;
 }
@@ -215,7 +232,7 @@ sub check_forwarding() {
         my $intf_inet_count = 0;
         my $num_intf = 0;
         for my $line (@if_out) {
-            if ($line =~ /^\d+:\s+(\S+): </) {
+            if ($line =~ /^\d+:\s+(\S+)\:\s</) {
                 $intf_name = $1;
                 if ($intf_inet_count > 0) {
                     $num_intf++;
@@ -242,7 +259,7 @@ sub check_forwarding() {
         close IFC;
         my $num_intf = 0;
         for my $line (@if_out) {
-            if ($line =~ /inet\s+/i && $line !~ /127\.0\.0\.1/) {
+            if ($line =~ /inet\s+/i and $line !~ /127\.0\.0\.1/) {
                 $num_intf++;
             }
         }
@@ -254,21 +271,21 @@ sub check_forwarding() {
 }
 
 sub ipt_chk_chain() {
-    my $chain = shift;
+    my ($chain, $ipt_bin) = @_;
     my $rv = 1;
 
-    my $ipt = new IPTables::Parse 'iptables' => $cmds{'iptables'}
-        or die "[*] Could not acquite IPTables::Parse object: $!";
+    my $ipt = new IPTables::Parse 'iptables' => $ipt_bin
+        or die "[*] Could not acquire IPTables::Parse object: $!";
 
     if ($fw_analyze) {
-        print "[+] Parsing iptables $chain chain rules.\n";
+        print "[+] Parsing $ipt_bin $chain chain rules.\n";
     }
 
     if ($fw_search_all) {
         ### we are not looking for specific log
         ### prefixes, but we need _some_ logging rule
-        my $ipt_log = $ipt->default_log('filter', $chain, $fw_file);
-        return 0 unless $ipt_log;
+        my ($ipt_log, $ipt_rv) = $ipt->default_log($log_and_drop_table, $chain, $fw_file);
+        return 0 unless $ipt_rv;
         if (defined $ipt_log->{'all'}) {
             ### found real default logging rule (assuming it is above a default
             ### drop rule, which we are not actually checking here).
@@ -276,7 +293,7 @@ sub ipt_chk_chain() {
         } else {
             my $log_protos    = '';
             my $no_log_protos = '';
-            for my $proto qw(tcp udp icmp) {
+            for my $proto (qw(tcp udp icmp)) {
                 if (defined $ipt_log->{$proto}) {
                     $log_protos .= "$proto/";
                 } else {
@@ -293,7 +310,7 @@ sub ipt_chk_chain() {
                 return 0;
             } else {
                 print FWCHECK
-"[-] Could not determine whether the iptables $chain chain is configured with\n",
+"[-] Could not determine whether the $ipt_bin $chain chain is configured with\n",
 "    a default logging rule on $config{'HOSTNAME'}.\n\n";
                 return 0;
             }
@@ -303,16 +320,19 @@ sub ipt_chk_chain() {
         ### for now we are only looking at the filter table, so if
         ### the iptables ruleset includes the log and drop rules in
         ### a user defined chain then psad will not see this.
-        my $ld_hr = $ipt->default_drop('filter', $chain, $fw_file);
+        my ($ld_hr, $ipt_rv) = $ipt->default_drop($log_and_drop_table,
+                $chain, $fw_file);
+
+        return 0 unless $ipt_rv;
 
         my $num_keys = 0;
         if (defined $ld_hr and keys %$ld_hr) {
             $num_keys++;
             my @protos;
             if (defined $ld_hr->{'all'}) {
-                @protos = qw(all);
+                @protos = (qw(all));
             } else {
-                @protos = qw(tcp udp icmp);
+                @protos = (qw(tcp udp icmp));
             }
             for my $proto (@protos) {
                 my $str1;
@@ -326,7 +346,7 @@ sub ipt_chk_chain() {
                         $str2 = "$proto scans";
                     }
                     print FWCHECK
-"[-] The $chain chain in the iptables ruleset on $config{'HOSTNAME'} does not\n",
+"[-] The $chain chain in the $ipt_bin ruleset on $config{'HOSTNAME'} does not\n",
 "    appear to include a default LOG rule $str1.  psad will not be able to\n",
 "    detect $str2 without such a rule.\n\n";
 
@@ -340,12 +360,12 @@ sub ipt_chk_chain() {
                     }
                     unless ($found) {
                         if ($proto eq 'all') {
-                            $str1 = "[-] The $chain chain in the iptables ruleset " .
+                            $str1 = "[-] The $chain chain in the $ipt_bin ruleset " .
                             "on $config{'HOSTNAME'} includes a default\n    LOG rule for " .
                             "all protocols,";
                             $str2 = 'scans';
                         } else {
-                            $str1 = "[-] The $chain chain in the iptables ruleset " .
+                            $str1 = "[-] The $chain chain in the $ipt_bin ruleset " .
                             "on $config{'HOSTNAME'} inclues a default\n    LOG rule for " .
                             "the $proto protocol,";
                             $str2 = "$proto scans";
@@ -366,7 +386,7 @@ sub ipt_chk_chain() {
                         $str1 = "for the $proto protocol";
                     }
                     print FWCHECK
-"[-] The $chain chain in the iptables ruleset on $config{'HOSTNAME'} does not\n",
+"[-] The $chain chain in the $ipt_bin ruleset on $config{'HOSTNAME'} does not\n",
 "    appear to include a default DROP rule $str1.\n\n";
                     $rv = 0;
                 }
@@ -461,6 +481,16 @@ sub send_mail() {
     return;
 }
 
+sub import_override_configs() {
+    my @override_configs = split /,/, $override_config_str;
+    for my $file (@override_configs) {
+        die "[*] Override config file $file does not exist"
+            unless -e $file;
+        &import_config($file);
+    }
+    return;
+}
+
 sub import_config() {
     my $conf_file = shift;
 
@@ -474,33 +504,49 @@ sub import_config() {
         if ($line =~ /^\s*(\S+)\s+(.*?)\;/) {
             my $varname = $1;
             my $val     = $2;
-            if ($val =~ m|/.+| && $varname =~ /^\s*(\S+)Cmd$/) {
+            if ($val =~ m|/.+| and $varname =~ /^\s*(\S+)Cmd$/) {
                 ### found a command
-                $cmds{$1} = $val;
+                $cmds{$1} = $val unless defined $cmds{$1};
             } else {
-                $config{$varname} = $val;
+                $config{$varname} = $val unless defined $config{$varname};
             }
         }
     }
+
     return;
 }
 
 sub expand_vars() {
-    for my $hr (\%config, \%cmds) {
-        for my $var (keys %$hr) {
-            my $val = $hr->{$var};
-            die "[*] Multiple variable expansion not supported yet ",
-                "(var $var)." if $val =~ m|\$.+\$|;
-            if ($val =~ m|\$(\w+)|) {
-                my $sub_var = $1;
-                die "[*] sub-ver $sub_var not allowed within same ",
-                    "variable $var" if $sub_var eq $var;
-                if (defined $config{$sub_var}) {
-                    $val =~ s|\$$sub_var|$config{$sub_var}|;
-                    $hr->{$var} = $val;
-                } else {
-                    die "[*] sub-var \"$sub_var\" not defined in ",
-                        "config for var: $var."
+
+    my $has_sub_var = 1;
+    my $resolve_ctr = 0;
+
+    while ($has_sub_var) {
+        $resolve_ctr++;
+        $has_sub_var = 0;
+        if ($resolve_ctr >= 20) {
+            die "[*] Exceeded maximum variable resolution counter.";
+        }
+        for my $hr (\%config, \%cmds) {
+            for my $var (keys %$hr) {
+                my $val = $hr->{$var};
+                if ($val =~ m|\$(\w+)|) {
+                    my $sub_var = $1;
+                    die "[*] sub-ver $sub_var not allowed within same ",
+                        "variable $var" if $sub_var eq $var;
+                    if (defined $config{$sub_var}) {
+                        if ($sub_var eq 'INSTALL_ROOT'
+                                and $config{$sub_var} eq '/') {
+                            $val =~ s|\$$sub_var||;
+                        } else {
+                            $val =~ s|\$$sub_var|$config{$sub_var}|;
+                        }
+                        $hr->{$var} = $val;
+                    } else {
+                        die "[*] sub-var \"$sub_var\" not defined in ",
+                            "config for var: $var."
+                    }
+                    $has_sub_var = 1;
                 }
             }
         }
@@ -512,14 +558,14 @@ sub expand_vars() {
 sub check_commands() {
     my $exceptions_hr = shift;
     my $caller = $0;
-    my @path = qw(
+    my @path = (qw(
         /bin
         /sbin
         /usr/bin
         /usr/sbin
         /usr/local/bin
         /usr/local/sbin
-    );
+    ));
     CMD: for my $cmd (keys %cmds) {
         ### both mail and sendmail are special cases, mail is not required
         ### if "nomail" is set in REPORT_METHOD, and sendmail is only
@@ -574,7 +620,10 @@ Options:
     --fw-analyze                      - Analyze the local iptables
                                         ruleset and exit.
     --no-fw-search-all                - looking for specific log
-                                        prefixes
+                                        prefixes.
+    --Lib-dir <dir>                   - Path to the psad lib directory.
+    --test-mode                       - Enable test mode (used by the
+                                        test suite).
     --help                            - Display help.
 
 _HELP_

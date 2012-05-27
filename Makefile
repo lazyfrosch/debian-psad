@@ -23,8 +23,6 @@
 #
 ##########################################################################
 #
-#  $Id: Makefile 1517 2006-01-07 02:25:10Z mbr $
-#
 
 ### default
 all : kmsgsd.c psadwatchd.c psad_funcs.c strlcpy.c strlcat.c psad.h

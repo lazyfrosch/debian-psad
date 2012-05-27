@@ -8,21 +8,21 @@
 #
 # Purpose: psad makes use of iptables logs to detect port scans,
 #          probes for backdoors and DDoS tools, and other suspect traffic
-#          (many signatures were adapted from the snort intrusion
-#          detection system).  Data is provided by kmsgsd which reads
-#          firewall messages out of the /var/lib/psad/psadfifo named pipe
-#          (syslog is reconfigured to write kern.info messages there
-#          which include firewall messages).  For more information read
-#          the psad man page or view the documentation provided at:
-#          http://www.cipherdyne.org.
+#          (many signatures were adapted from the Snort intrusion
+#          detection system).  Data is provided by parsing syslog
+#          firewall messages out of /var/log/messages (or wherever syslog
+#          is configured to write iptables logs to).
+#
+#          For more information read the psad man page or view the
+#          documentation provided at: http://www.cipherdyne.org/psad/
 #
 # Author: Michael Rash (mbr@cipherdyne.org)
 #
 # Credits: (see the CREDITS file bundled with the psad sources.)
 #
-# Version: 2.1.7
+# Version: 2.2
 #
-# Copyright (C) 1999-2009 Michael Rash (mbr@cipherdyne.org)
+# Copyright (C) 1999-2012 Michael Rash (mbr@cipherdyne.org)
 #
 # Reference: Snort is a registered trademark of Sourcefire, Inc.
 #
@@ -43,14 +43,14 @@
 # Default behavior is as follows.  Each of these features can be disabled
 # with command line arguments:
 #
-#       - passive OS fingerprinting            = yes
-#       - snort sid signature matching         = yes
-#       - write fw errors to error log         = yes
-#       - daemon mode                          = yes
-#       - reverse dns lookups                  = yes
-#       - validate firewall rules              = yes
-#       - whois lookups of scanning IPs        = yes
-#       - parse netstat output for local ports = yes
+#       - passive OS fingerprinting                   = yes
+#       - snort rule matching                         = yes
+#       - write fw errors to error log                = yes
+#       - daemon mode                                 = yes
+#       - reverse dns lookups                         = yes
+#       - validate firewall rules                     = yes
+#       - whois lookups of scanning IPs               = yes
+#       - parse netstat output for local server ports = yes
 #
 # Coding Style:  All configuration variables from psad.conf are stored in
 #   the %config hash by keys that are in capital letters.  This is
@@ -116,8 +116,9 @@
 #   created:
 #
 #       danger_level       - Overall danger level aggregated for all scans.
-#       whois              - Whois information for <src>.
-#       p0f_guess          - Passive OS fingerprint guess.
+#       p0f_guess          - Passive OS fingerprint guess for <src>.
+#       <src/dst>_whois    - Whois information for <src> (or <dst> if src
+#                            is a local IP).
 #       <dst>_email_ctr    - Total email alerts sent for <src>.
 #       <dst>_email_alert  - The most recent email alert for <dst>.
 #       <dst>_packet_ctr   - Packet counters for <dst>.
@@ -127,8 +128,6 @@
 #   single source address may scan several destination addresses.
 #
 ###############################################################################
-#
-# $Id: psad 2298 2010-07-14 21:52:07Z mbr $
 #
 
 ### modules used by psad
@@ -144,11 +143,8 @@ use strict;
 
 ### ========================== main =================================
 
-### set the current psad version and file revision numbers
-my $version = '2.1.7';
-my $revision_svn = '$Revision: 2298 $';
-my $rev_num = '1';
-($rev_num) = $revision_svn =~ m|\$Rev.*:\s+(\S+)|;
+### set the current version
+my $version = '2.2';
 
 ### default config file for psad (can be changed with
 ### --config switch)
@@ -202,7 +198,8 @@ my %scan_ext_exec = ();
 my %p0f = ();
 
 ### cache p0f-based passive os fingerprinting signature information
-my %p0f_sigs = ();
+my %p0f_ipv4_sigs = ();
+my %p0f_ipv6_sigs = ();
 
 ### cache TOS-based passive os fingerprinting information
 my %posf = ();
@@ -211,7 +208,8 @@ my %posf = ();
 my %posf_sigs = ();
 
 ### cache valid icmp types and corresponding codes
-my %valid_icmp_types = ();
+my %valid_icmp_types  = ();
+my %valid_icmp6_types = ();
 
 ### Cache snort rule messages unless --no-snort-sids switch was
 ### given.  This is only useful if iptables includes rules
@@ -233,6 +231,7 @@ my %snort_ref_baseurl = ();
 ### cache all scan signatures from /etc/psad/signatures file
 my %sigs = ();
 my %sig_search = ();
+my %sig_ip_objs = ();
 
 ### cache iptables prefixes
 my %ipt_prefixes = ();
@@ -247,13 +246,13 @@ my %ignore_protocols = ();
 my %ignore_interfaces = ();
 
 ### data array used for dshield.org logs
-my @dshield_data;
+my @dshield_data = ();
 
 ### track the last time we sent an alert to dshield.org
-my $last_dshield_alert;
+my $last_dshield_alert = '';
 
 ### calculate how often a dshield alert will be sent
-my $dshield_alert_interval;
+my $dshield_alert_interval = '';
 
 ### dshield stats counters
 my $dshield_email_ctr = 0;
@@ -261,18 +260,22 @@ my $dshield_lines_ctr = 0;
 
 ### get the current timezone for dshield (this is calculated
 ### and re-calculated since the timezone may change).
-my $timezone;
+my $timezone = '';
 
 ### get the current year for dshield
-my $year;
+my $year = '';
 
 ### keep track of how many CHECK_INTERVALS have elapsed; this is
 ### useful for TOP_SCANS_CTR_THRESHOLD
 my $check_interval_ctr = 0;
 
+### track the number of scan IP pairs for MAX_SCAN_IP_PAIRS thresholding
+my $scan_ip_pairs = 0;
+
 ### %auto_dl holds all ip addresses that should automatically
 ### be assigned a danger level (or ignored).
 my %auto_dl = ();
+my %auto_dl_ip_objs = ();
 my %auto_assigned_msg = ();
 
 ### cache the source ips that we have automatically blocked
@@ -280,7 +283,7 @@ my %auto_assigned_msg = ();
 my %auto_blocked_ips = ();
 
 ### counter to check psad iptables chains and jump rules
-my $netfilter_prereq_check = 0;
+my $iptables_prereq_check = 0;
 
 ### cache the addresses we have issued dns lookups against.
 my %dns_cache = ();
@@ -299,14 +302,18 @@ my %local_ips = ();
 ### Top attacking statistics
 my %top_tcp_ports = ();
 my %top_udp_ports = ();
+my %top_udplite_ports = ();
 my %top_sigs    = ();
 my %sig_sources = ();
 my %top_sig_counts = ();
 my %top_packet_counts = ();
 my %local_src = ();
 
-### regex to match an ip address
-my $ip_re = qr|(?:[0-2]?\d{1,2}\.){3}[0-2]?\d{1,2}|;
+### regex to match IP addresses
+my $ipv4_re = qr|(?:[0-2]?\d{1,2}\.){3}[0-2]?\d{1,2}|;  ### IPv4
+
+### IPv6 - full version in ip6tables logs
+my $ipv6_re = qr|(?:[a-f0-9]{4}:){7}(?:[a-f0-9]{4})|i;
 
 ### ttl values are decremented depending on the number of hops
 ### the packet has taken before it hits the firewall.  We will
@@ -314,13 +321,12 @@ my $ip_re = qr|(?:[0-2]?\d{1,2}\.){3}[0-2]?\d{1,2}|;
 ### average.
 my $max_hops = 20;
 
-### packet counters
-my $tcp_ctr  = 0;
-my $udp_ctr  = 0;
-my $icmp_ctr = 0;
+### per protocol packet counters
+my @protocols = qw/tcp udp udplite icmp icmp6/;
+my %proto_ctrs = ();
 
 ### pid file hash
-my %pidfiles;
+my %pidfiles = ();
 
 ### initialize and scope some default variables (command
 ### line args can override some default values)
@@ -335,10 +341,12 @@ my $analysis_fields  = '';
 my $analysis_tokens_ar = [];
 my $analysis_match_criteria_ar = [];
 my $get_next_rule_id = 0;
+my $test_mode        = 0;
 my $syslog_server    = 0;
 my $kill             = 0;
 my $restart          = 0;
 my $restrict_ip      = '';
+my $restrict_ip_cmdline = '';
 my $status_mode      = 0;
 my $status_ip        = '';
 my $status_min_dl    = 0;
@@ -388,7 +396,7 @@ my $csv_have_timestamp = 0;
 my $dump_ipt_policy  = 0;
 my $fw_include_ips   = 0;
 my $benchmark        = 0;
-my $b_packets        = 0;
+my $num_packets      = 0;
 my $usr1             = 0;
 my $hup              = 0;
 my $usr1_flag        = 0;
@@ -406,6 +414,7 @@ my $lib_dir          = '';
 my $rm_data_ctr      = 0;
 my $analysis_emails  = 0;
 my $analysis_whois   = 0;
+my $enable_analysis_dns = 0;
 my $netstat_lkup_ctr = 0;
 my $kmsgsd_started   = 0;
 my $warn_msg         = '';
@@ -415,12 +424,14 @@ my $cmdl_interface   = '';
 my $analyze_write_data = 0;
 my $local_ips_lkup_ctr = 0;
 my $num_hash_marks = 76;  ### for gnuplot output
+my $imported_syslog_module = 0;
 
 ### these flags are used to disable several features
 ### in psad if specified from the command line
 my $no_snort_sids = 0;
 my $no_signatures = 0;
 my $no_icmp_types = 0;
+my $no_icmp6_types = 0;
 my $no_auto_dl    = 0;
 my $no_posf       = 0;
 my $no_daemon     = 0;
@@ -449,6 +460,12 @@ my %tcp_p0f_opt_types = (
 );
 
 my %ip_options = ();
+
+### for ICMP
+my $ICMP_ECHO_REQUEST  = 8;
+my $ICMP_ECHO_REPLY    = 0;
+my $ICMP6_ECHO_REQUEST = 128;
+my $ICMP6_ECHO_REPLY   = 129;
 
 ### These are not directly support by psad because they
 ### do not appear in iptables logs; however, several of
@@ -494,18 +511,30 @@ my %pkt_NF_init = (
 
     ### network layer
     'src'    => '',
+    's_obj'  => '',
     'dst'    => '',
+    'd_obj'  => '',
     'proto'  => '',
+    'ip_len' => -1,
+    'ip_opts'  => '',  ### v4 or v6
+
+    ### IPv4
     'ip_id'  => -1,
     'ttl'    => -1,
     'tos'    => '',
-    'ip_len' => -1,
-    'itype'  => -1,
-    'icode'  => -1,
-    'ip_opts'  => '',
+    'frag_bit' => 0,
+
+    ### IPv6
+    'is_ipv6' => 0,
+    'tc'      => -1,
+    'hop_limit'  => -1,
+    'flow_label' => -1,
+
+    ### ICMP
+    'itype'    => -1,
+    'icode'    => -1,
     'icmp_seq' => -1,
     'icmp_id'  => -1,
-    'frag_bit' => 0,
 
     ### transport layer
     'sp'  => -1,
@@ -591,9 +620,7 @@ my @args_cp = @ARGV;
 ### Everthing after this point must be executed as root (psad
 ### only needs root if run in auto-blocking mode; should take
 ### this into account and drop privileges).
-$< == 0 && $> == 0 or
-    die '[*] psad: You must be root (or equivalent ',
-        "UID 0 account) to execute psad!  Exiting.\n";
+&is_root();
 
 ### Import all psad configuration and signatures files
 ### (psad.conf, posf, signatures, psad_icmp_types,
@@ -614,7 +641,6 @@ $< == 0 && $> == 0 or
 unless ($no_daemon or $debug) {
     my $pid = fork();
     exit 0 if $pid;
-    close STDIN; close STDOUT; close STDERR;
     die "[*] $0: Couldn't fork: $!" unless defined $pid;
     POSIX::setsid() or die "[*] $0: Can't start a new session: $!";
 }
@@ -889,8 +915,6 @@ MAIN: for (;;) {
 
         ### log the top port and signature matches
         &log_top_scans();
-
-        $check_interval_ctr = 0;
     }
 
     ### Write the number of tcp/udp/icmp packets out
@@ -957,6 +981,19 @@ MAIN: for (;;) {
         $warn_msg = '';
     }
 
+    ### see if we need to timeout any old scans
+    if ($config{'ENABLE_PERSISTENCE'} eq 'N') {
+
+        my $do_timeout = 0;
+        if ($config{'PERSISTENCE_CTR_THRESHOLD'} == 0) {
+            $do_timeout = 1;
+        } elsif ($check_interval_ctr % $config{'PERSISTENCE_CTR_THRESHOLD'} == 0) {
+            $do_timeout = 1;
+        }
+
+        &delete_old_scans() if $do_timeout;
+    }
+
     $check_interval_ctr++;
 
     $fw_data_file_check_ctr++;
@@ -981,7 +1018,7 @@ exit 0;
 ### keeps track of tcp flags for each scan, test for snort sid
 ### values in iptables packets (if fwsnort is being used).
 sub check_scan() {
-    my $fw_packets_aref = shift;
+    my $fw_packets_ar = shift;
 
     my %curr_scan = ();
     my %curr_sigs_dl = ();
@@ -990,13 +1027,14 @@ sub check_scan() {
     my %auto_block_regex_match = ();
 
     my $pkt_ctr = 0;
+    my $log_scan_ip_pair_max = 0;
 
-    my $print_scale_factor = &get_scale_factor($#$fw_packets_aref);
+    my $print_scale_factor = &get_scale_factor($#$fw_packets_ar);
 
     ### loop through all of the packet log messages we have just acquired
     ### from iptables
 
-    PKT: for my $pkt_str (@$fw_packets_aref) {
+    PKT: for my $pkt_str (@$fw_packets_ar) {
 
         ### main packet data structure
         my %pkt = %pkt_NF_init;
@@ -1010,8 +1048,9 @@ sub check_scan() {
 
         ### main parsing routine for the iptables packet logging message
         my $pkt_parse_rv = &parse_NF_pkt_str(\%pkt, $pkt_str);
+        print STDERR Dumper \%pkt if $debug and $verbose;
         if ($pkt_parse_rv == $PKT_ERROR) {
-            push @err_pkts, $pkt_str;
+            push @err_pkts, $pkt_str unless $no_ipt_errors;
             next PKT;
         } elsif ($pkt_parse_rv == $PKT_IGNORE) {
             next PKT;
@@ -1024,23 +1063,41 @@ sub check_scan() {
             next PKT unless $#$matched_fields_ar > -1;
         }
 
+        $proto_ctrs{$pkt{'proto'}}++;
         if ($pkt{'proto'} eq 'tcp') {
             $top_tcp_ports{$pkt{'dp'}}++;
-            $tcp_ctr++;
         } elsif ($pkt{'proto'} eq 'udp') {
             $top_udp_ports{$pkt{'dp'}}++;
-            $udp_ctr++;
-        } elsif ($pkt{'proto'} eq 'icmp') {
-            $icmp_ctr++;
+        } elsif ($pkt{'proto'} eq 'udplite') {
+            $top_udplite_ports{$pkt{'dp'}}++;
         }
-
-        ### track packet counts for this source
-        $top_packet_counts{$pkt{'src'}}++;
 
         ### If we made it here then we correctly matched packets
         ### that the firewall logged.
         print STDERR "[+] valid packet: $pkt{'src'} ($pkt{'sp'}) -> ",
             "$pkt{'dst'} ($pkt{'dp'}) $pkt{'proto'}\n" if $debug;
+
+        ### see if we have hit the MAX_SCAN_IP_PAIRS threshold
+        if ($config{'MAX_SCAN_IP_PAIRS'} > 0) {
+            if ($scan_ip_pairs >= $config{'MAX_SCAN_IP_PAIRS'}) {
+                unless (defined $scan{$pkt{'src'}}
+                        and defined $scan{$pkt{'src'}}{$pkt{'dst'}}) {
+                    print STDERR "[-] excluding $pkt{'src'} -> $pkt{'dst'}, ",
+                            "scan IP pairs too high: $scan_ip_pairs\n"
+                        if $debug;
+                    $log_scan_ip_pair_max = 1;
+                    next PKT;
+                }
+            }
+            if (not defined $scan{$pkt{'src'}}) {
+                $scan_ip_pairs++;
+            } elsif (not defined $scan{$pkt{'src'}}{$pkt{'dst'}}) {
+                $scan_ip_pairs++;
+            }
+        }
+
+        ### track packet counts for this source
+        $top_packet_counts{$pkt{'src'}}++;
 
         if ($config{'HOME_NET'} ne 'any') {
             if ($pkt{'chain'} eq 'INPUT') {
@@ -1049,7 +1106,7 @@ sub check_scan() {
                 $local_src{$pkt{'src'}} = '';
             } elsif ($pkt{'chain'} eq 'FORWARD') {
                 $local_src{$pkt{'src'}} = ''
-                    if &is_local($pkt{'src'});
+                    if &is_local($pkt{'src'}, $pkt{'s_obj'});
             }
         }
 
@@ -1078,6 +1135,81 @@ sub check_scan() {
             }
         }
 
+        if ($pkt{'proto'} eq 'icmp') {
+
+            ### validate icmp type and code fields against the official values
+            ### in RFC 792.  See %inval_type_code for corresponding signature
+            ### message text and danger levels.
+            my $type_code_rv = &check_icmp_type(
+                    'icmp', \%valid_icmp_types,
+                    $pkt{'itype'}, $pkt{'icode'});
+
+            my $update_dl = 0;
+            if ($type_code_rv == $BAD_ICMP_TYPE) {
+
+                $scan{$pkt{'src'}}{$pkt{'dst'}}{'icmp'}
+                    {'invalid_type'}{$pkt{'itype'}}
+                    {$pkt{'chain'}}{'pkts'}++;
+
+                $update_dl = 1;
+
+            } elsif ($type_code_rv == $BAD_ICMP_CODE) {
+
+                $scan{$pkt{'src'}}{$pkt{'dst'}}{'icmp'}
+                    {'invalid_code'}{$pkt{'itype'}}{$pkt{'icode'}}
+                    {$pkt{'chain'}}{'pkts'}++;
+
+                $update_dl = 1;
+            }
+
+            if ($update_dl) {
+                if (defined $scan_dl{$pkt{'src'}}) {
+                    if ($scan_dl{$pkt{'src'}} < 2) {
+                        $scan_dl{$pkt{'src'}} = 2;
+                    }
+                } else {
+                    $scan_dl{$pkt{'src'}} = 2;
+                }
+            }
+
+        } elsif ($pkt{'proto'} eq 'icmp6') {
+
+            ### validate icmp6 type and code fields against the official values
+            ### defined by IANA.  See %inval_type_code for corresponding signature
+            ### message text and danger levels.
+            my $type_code_rv = &check_icmp_type(
+                    'icmp6', \%valid_icmp6_types,
+                    $pkt{'itype'}, $pkt{'icode'});
+
+            my $update_dl = 0;
+            if ($type_code_rv == $BAD_ICMP_TYPE) {
+
+                $scan{$pkt{'src'}}{$pkt{'dst'}}{'icmp6'}
+                    {'invalid_type'}{$pkt{'itype'}}
+                    {$pkt{'chain'}}{'pkts'}++;
+
+                $update_dl = 1;
+
+            } elsif ($type_code_rv == $BAD_ICMP_CODE) {
+
+                $scan{$pkt{'src'}}{$pkt{'dst'}}{'icmp6'}
+                    {'invalid_code'}{$pkt{'itype'}}{$pkt{'icode'}}
+                    {$pkt{'chain'}}{'pkts'}++;
+
+                $update_dl = 1;
+            }
+
+            if ($update_dl) {
+                if (defined $scan_dl{$pkt{'src'}}) {
+                    if ($scan_dl{$pkt{'src'}} < 2) {
+                        $scan_dl{$pkt{'src'}} = 2;
+                    }
+                } else {
+                    $scan_dl{$pkt{'src'}} = 2;
+                }
+            }
+        }
+
         unless ($no_snort_sids) {
             if ($pkt{'fwsnort_sid'}) {
 
@@ -1099,6 +1231,9 @@ sub check_scan() {
 
                     my ($dl, $is_sig_match) = &match_sigs(\%pkt);
 
+                    print STDERR "    match_sigs() returned DL: $dl\n"
+                        if $debug and $verbose;
+
                     if ($dl) {
                         $curr_sigs_dl{$pkt{'src'}} = $dl;
                     } else {
@@ -1109,6 +1244,7 @@ sub check_scan() {
                 }
             }
         }
+
         ### note that we send this packet data off to DShield regardless
         ### of whether psad decides that it is associated with a scan so
         ### that DShield can make its own determination
@@ -1127,23 +1263,15 @@ sub check_scan() {
             }
         }
 
-        ### see if we need to timeout any old scans
-        if ($config{'ENABLE_PERSISTENCE'} eq 'N') {
-            if (defined $scan{$pkt{'src'}}{$pkt{'dst'}}{'s_time'}) {
-                if ((time() - $scan{$pkt{'src'}}{$pkt{'dst'}}{'s_time'})
-                        >= $config{'SCAN_TIMEOUT'}) {
-                    delete $scan{$pkt{'src'}}{$pkt{'dst'}};
-                }
-            }
-        }
-
         ### record the absolute starting time of the scan
         unless (defined $scan{$pkt{'src'}}{$pkt{'dst'}}{'s_time'}) {
             if ($analyze_mode) {
                 if ($pkt_str =~ /^(.*?)\s+\S+\s+kernel:/) {
-                    $scan{$pkt{'src'}}{$pkt{'dst'}}{'s_time'} = $1;
+                    $scan{$pkt{'src'}}{$pkt{'dst'}}{'s_time'}
+                        = &date_time($1);
                 } elsif ($pkt_str =~ /^\s*(\S+\s+\S+\s+\S+)/) {
-                    $scan{$pkt{'src'}}{$pkt{'dst'}}{'s_time'} = $1;
+                    $scan{$pkt{'src'}}{$pkt{'dst'}}{'s_time'}
+                        = &date_time($1);
                 } else {
                     die "[*] Could not extract time from packet: $pkt_str\n",
                         "    Please send a bug report to: ",
@@ -1190,7 +1318,8 @@ sub check_scan() {
         $curr_scan{$pkt{'src'}}{$pkt{'dst'}}{$pkt{'proto'}}{'chain'}
                 {$pkt{'chain'}}{$pkt{'log_prefix'}}++;
 
-        if ($pkt{'proto'} eq 'tcp' or $pkt{'proto'} eq 'udp') {
+        if ($pkt{'proto'} eq 'tcp' or $pkt{'proto'} eq 'udp'
+                or $pkt{'proto'} eq 'udplite') {
             ### initialize the start and end port for the scanned port range
             if (not defined $curr_scan{$pkt{'src'}}{$pkt{'dst'}}{$pkt{'proto'}}{'strtp'}) {
                 ### make sure the initial start port is not too low
@@ -1227,7 +1356,9 @@ sub check_scan() {
         ### system based on the ttl, id, len, window, and tos
         ### fields in tcp syn packets (this technique is based
         ### on the paper "Passive OS Fingerprinting: Details
-        ### and Techniques" by Toby Miller).
+        ### and Techniques" by Toby Miller).  Also attempt to
+        ### fingerprint with a re-implementation of Michal Zalewski's
+        ### p0f that only requires iptables log messages
         unless ($no_posf) {
             ### make sure we have not already guessed the OS,
             ### and if we have been unsuccessful in guessing
@@ -1236,16 +1367,16 @@ sub check_scan() {
                 if ($pkt{'tcp_opts'}) {  ### got the tcp options portion of the header
 
                     ### p0f based fingerprinting
-                    &p0f($pkt{'src'}, $pkt{'ip_len'}, $pkt{'frag_bit'},
-                            $pkt{'ttl'}, $pkt{'win'}, $pkt{'tcp_opts'});
+                    &p0f(\%pkt);
 
                 } elsif (not defined $posf{$pkt{'src'}}{'guess'}
                         and $scan{$pkt{'src'}}{$pkt{'dst'}}{'absnum'} < 100) {
-                    &posf($pkt{'src'}, $pkt{'ip_len'}, $pkt{'tos'},
-                            $pkt{'ttl'}, $pkt{'ip_id'}, $pkt{'win'})
+                    &posf(\%pkt);
                 }
             }
         }
+
+        %pkt = ();
     }
 
     ### write bogus packets to the error log.
@@ -1284,11 +1415,22 @@ sub check_scan() {
     &auto_psad_response(\%curr_scan, \%auto_block_regex_match)
         if $config{'ENABLE_AUTO_IDS'} eq 'Y' and not $analyze_mode;
 
+    if ($log_scan_ip_pair_max) {
+        &sys_log("scan IP pairs threshold reached");
+    }
+
     return;
 }
 
 sub parse_NF_pkt_str() {
     my ($pkt_hr, $pkt_str) = @_;
+
+    my $is_ipv6    = 0;
+    my $is_tcp     = 0;
+    my $is_udp     = 0;
+    my $is_udplite = 0;
+    my $is_icmp    = 0;
+    my $is_icmp6   = 0;
 
     ### with ENABLE_SYSLOG_FILE enabled, psad sees all sorts of syslog
     ### messages that aren't just from iptables (kmsgsd is not running
@@ -1415,33 +1557,129 @@ sub parse_NF_pkt_str() {
         return $PKT_IGNORE unless $matched;
     }
 
-    ### get IP options if --log-ip-options is used
-    ### (they appear before the PROTO= field).
+    ### test for IPv6
+    if ($pkt_str =~ /HOPLIMIT=\d+\s+FLOWLBL=\d+/) {
+        return $PKT_IGNORE unless $config{'ENABLE_IPV6_DETECTION'} eq 'Y';
+        $is_ipv6 = 1;
+        $pkt_hr->{'is_ipv6'} = 1;
+    }
+
+    ### test for IPv4 "don't fragment" bit
+    unless ($is_ipv6) {
+        $pkt_hr->{'frag_bit'} = 1 if $pkt_str =~ /\sDF\s+PROTO/;
+    }
+
+    ### get IP options if --log-ip-options is used - they appear before the
+    ### PROTO= field for either IPv4 or IPv6 packets
     if ($pkt_str =~ /OPT\s+\((\S+)\)\s+PROTO=/) {
         $pkt_hr->{'ip_opts'} = $1;
     }
 
-    ### May 18 22:21:26 orthanc kernel: DROP IN=eth2 OUT=
-    ### MAC=00:60:1d:23:d0:01:00:60:1d:23:d3:0e:08:00 SRC=192.168.20.25
-    ### DST=192.168.20.1 LEN=60 TOS=0x10 PREC=0x00 TTL=64 ID=47300 DF
-    ### PROTO=TCP SPT=34111 DPT=6345 WINDOW=5840 RES=0x00 SYN URGP=0
+    if ($is_ipv6 and $pkt_str =~ /PROTO=ICMPv6\s/) {
+        ### test for ICMP before TCP or UDP because ICMP destination
+        ### unreachable messages can contain embedded TCP/UDP specifics like
+        ### so:
 
-    if ($pkt_str =~ /SRC=($ip_re)\s+DST=($ip_re)\s+LEN=(\d+)\s+TOS=(\S+)
-                \s*.*\s+TTL=(\d+)\s+ID=(\d+)\s*.*\s+PROTO=TCP\s+
-                SPT=(\d+)\s+DPT=(\d+)\s.*\s*WINDOW=(\d+)\s+
-                (.*)\s+URGP=/x) {
+        ### Jul 21 19:07:39 minastirith kernel: [1912155.755921] IPv6 Packet
+        ### IN=lo OUT= MAC=00:00:00:00:00:00:00:00:00:00:00:00:86:dd
+        ### SRC=0000:0000:0000:0000:0000:0000:0000:0001
+        ### DST=0000:0000:0000:0000:0000:0000:0000:0001 LEN=107 TC=0
+        ### HOPLIMIT=64 FLOWLBL=0 PROTO=ICMPv6 TYPE=1 CODE=4
+        ### [SRC=0000:0000:0000:0000:0000:0000:0000:0001
+        ### DST=0000:0000:0000:0000:0000:0000:0000:0001 LEN=59 TC=0
+        ### HOPLIMIT=64 FLOWLBL=0 PROTO=UDP SPT=35186 DPT=12345 LEN=19 ]
 
-        ($pkt_hr->{'src'}, $pkt_hr->{'dst'}, $pkt_hr->{'ip_len'},
-            $pkt_hr->{'tos'}, $pkt_hr->{'ttl'}, $pkt_hr->{'ip_id'},
-            $pkt_hr->{'sp'}, $pkt_hr->{'dp'}, $pkt_hr->{'win'},
-            $pkt_hr->{'flags'})
-                = ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10);
+        $is_icmp6 = 1;
+    } elsif ($pkt_str =~ /PROTO=ICMP\s/) {
+        ### test for ICMP before TCP or UDP because ICMP destination
+        ### unreachable messages can contain embedded TCP/UDP specifics like
+        ### so:
+
+        ### Sep  8 18:04:26 minastirith kernel: [28241.572876] IN_DROP
+        ### IN=wlan0 OUT= MAC=00:1a:9f:91:df:ae:00:12:27:12:0a:a0:12:00
+        ### SRC=10.0.0.138 DST=192.168.1.103 LEN=96 TOS=0x00 PREC=0xC0
+        ### TTL=254 ID=63642 PROTO=ICMP TYPE=3 CODE=3 [SRC=192.168.1.103
+        ### DST=10.0.0.138 LEN=68 TOS=0x00 PREC=0x00 TTL=0 ID=22458 PROTO=UDP
+        ### SPT=35080 DPT=33434 LEN=48 ]
+
+        $is_icmp = 1;
+    } elsif ($pkt_str =~ /PROTO=TCP\s/) {
+        $is_tcp = 1;
+    } elsif ($pkt_str =~ /PROTO=UDPLITE\s/) {
+        $is_udplite = 1;
+    } elsif ($pkt_str =~ /PROTO=UDP\s/) {
+        $is_udp = 1;
+    } else {
+        print STDERR "[-] err packet: unrecognized protocol\n" if $debug;
+        return $PKT_ERROR;
+    }
+
+    if ($is_tcp) {
+        if ($is_ipv6) {
+
+            ### Jul 18 19:19:08 lorien kernel: [ 1835.131574] IPV6 packet IN=lo
+            ### OUT= MAC=00:00:00:00:00:00:00:00:00:00:00:00:86:dd
+            ### SRC=0000:0000:0000:0000:0000:0000:0000:0001
+            ### DST=0000:0000:0000:0000:0000:0000:0000:0001 LEN=72 TC=0
+            ### HOPLIMIT=255 FLOWLBL=0 PROTO=TCP SPT=22 DPT=57005 WINDOW=512
+            ### RES=0x00 ACK FIN URGP=0 
+            if ($pkt_str =~ /SRC=($ipv6_re)\s+DST=($ipv6_re)\s+LEN=(\d+)\s+
+                    TC=(\d+)\s+HOPLIMIT=(\d+)\s+FLOWLBL=(\d+)\s+PROTO=TCP\s+
+                    SPT=(\d+)\s+DPT=(\d+)\s+WINDOW=(\d+)\s+
+                    (.*)\s+URGP=/x) {
+
+                ($pkt_hr->{'src'}, $pkt_hr->{'dst'}, $pkt_hr->{'ip_len'},
+                    $pkt_hr->{'tc'}, $pkt_hr->{'hop_limit'},
+                    $pkt_hr->{'flow_label'}, $pkt_hr->{'sp'}, $pkt_hr->{'dp'},
+                    $pkt_hr->{'win'}, $pkt_hr->{'flags'})
+                        = ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10);
+
+                $pkt_hr->{'s_obj'} = new6 NetAddr::IP($pkt_hr->{'src'})
+                    or return $PKT_ERROR;
+                $pkt_hr->{'d_obj'} = new6 NetAddr::IP($pkt_hr->{'dst'})
+                    or return $PKT_ERROR;
+
+            } else {
+                print STDERR "[-] err packet: strange IPv6 TCP format\n"
+                    if $debug;
+                return $PKT_ERROR;
+            }
+
+        } else {
+
+            ### May 18 22:21:26 orthanc kernel: DROP IN=eth2 OUT=
+            ### MAC=00:60:1d:23:d0:01:00:60:1d:23:d3:0e:08:00 SRC=192.168.20.25
+            ### DST=192.168.20.1 LEN=60 TOS=0x10 PREC=0x00 TTL=64 ID=47300 DF
+            ### PROTO=TCP SPT=34111 DPT=6345 WINDOW=5840 RES=0x00 SYN URGP=0
+
+            if ($pkt_str =~ /SRC=($ipv4_re)\s+DST=($ipv4_re)\s+LEN=(\d+)\s+TOS=(\S+)
+                    \s*.*\s+TTL=(\d+)\s+ID=(\d+)\s*.*\s+PROTO=TCP\s+
+                    SPT=(\d+)\s+DPT=(\d+)\s.*\s*WINDOW=(\d+)\s+
+                    (.*)\s+URGP=/x) {
+
+                ($pkt_hr->{'src'}, $pkt_hr->{'dst'}, $pkt_hr->{'ip_len'},
+                    $pkt_hr->{'tos'}, $pkt_hr->{'ttl'}, $pkt_hr->{'ip_id'},
+                    $pkt_hr->{'sp'}, $pkt_hr->{'dp'}, $pkt_hr->{'win'},
+                    $pkt_hr->{'flags'})
+                        = ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10);
+
+                $pkt_hr->{'s_obj'} = new NetAddr::IP($pkt_hr->{'src'})
+                    or return $PKT_ERROR;
+                $pkt_hr->{'d_obj'} = new NetAddr::IP($pkt_hr->{'dst'})
+                    or return $PKT_ERROR;
+
+            } else {
+                print STDERR "[-] err packet: strange IPv4 TCP format\n"
+                    if $debug;
+                return $PKT_ERROR;
+            }
+        }
+
+        $pkt_hr->{'proto'} = 'tcp';
 
         ### the reserve bits are not reported by ulogd, but normal
         ### iptables syslog messages contain them.
         $pkt_hr->{'flags'} =~ s/\s*RES=\S+\s*//;
-
-        $pkt_hr->{'proto'} = 'tcp';
 
         ### default to NULL
         $pkt_hr->{'flags'} = 'NULL' unless $pkt_hr->{'flags'};
@@ -1477,7 +1715,6 @@ sub parse_NF_pkt_str() {
             print STDERR "[-] err packet: bad tcp flags.\n" if $debug;
             return $PKT_ERROR;
         }
-        $pkt_hr->{'frag_bit'} = 1 if $pkt_str =~ /\sDF\s+PROTO/;
 
         ### don't pickup IP options if --log-ip-options is used
         ### (they appear before the PROTO= field).
@@ -1485,20 +1722,14 @@ sub parse_NF_pkt_str() {
             $pkt_hr->{'tcp_opts'} = $1;
         }
 
-        ### make sure we have a "reasonable" packet (note that nmap
-        ### can scan port 0 and iptables can report this fact)
-        unless ($pkt_hr->{'ip_len'} >= 0 and $pkt_hr->{'tos'}
-                and $pkt_hr->{'ttl'} >= 0 and $pkt_hr->{'ip_id'} >= 0
-                and $pkt_hr->{'proto'} and $pkt_hr->{'sp'} >= 0
-                and $pkt_hr->{'dp'} >= 0 and $pkt_hr->{'win'} >= 0
-                and $pkt_hr->{'flags'}) {
-            return $PKT_ERROR;
-        }
-
         if ($pkt_str =~ /\sSEQ=(\d+)\s+ACK=(\d+)/) {
             $pkt_hr->{'tcp_seq'} = $1;
             $pkt_hr->{'tcp_ack'} = $2;
         }
+
+        ### see if we need to ignore this packet based on the
+        ### IGNORE_PROTOCOLS config keyword.
+        return $PKT_IGNORE if &check_ignore_proto($pkt_hr->{'proto'});
 
         ### see if we need to ignore this packet based on the
         ### IGNORE_PORTS config keyword
@@ -1517,31 +1748,67 @@ sub parse_NF_pkt_str() {
                 "$dflags";
         }
 
-    ### May 18 22:21:26 orthanc kernel: DROP IN=eth2 OUT=
-    ### MAC=00:60:1d:23:d0:01:00:60:1d:23:d3:0e:08:00
-    ### SRC=192.168.20.25 DST=192.168.20.1 LEN=28 TOS=0x00 PREC=0x00
-    ### TTL=40 ID=47523 PROTO=UDP SPT=57339 DPT=305 LEN=8
+    } elsif ($is_udp or $is_udplite) {
 
-    } elsif ($pkt_str =~ /SRC=($ip_re)\s+DST=($ip_re)\s+LEN=(\d+)\s+TOS=(\S+)
+        if ($is_udplite) {
+            $pkt_hr->{'proto'} = 'udplite';
+        } else {
+            $pkt_hr->{'proto'} = 'udp';
+        }
+
+        if ($is_ipv6) {
+
+            ### Jul 21 21:07:39 minastirith kernel: [1912155.755862] IPv6 Packet IN=lo
+            ### OUT= MAC=00:00:00:00:00:00:00:00:00:00:00:00:86:dd
+            ### SRC=0000:0000:0000:0000:0000:0000:0000:0001
+            ### DST=0000:0000:0000:0000:0000:0000:0000:0001 LEN=59 TC=0 HOPLIMIT=64
+            ### FLOWLBL=0 PROTO=UDP SPT=35186 DPT=12345 LEN=19 
+            if ($pkt_str =~ /SRC=($ipv6_re)\s+DST=($ipv6_re)\s+LEN=(\d+)\s+
+                    TC=(\d+)\s+HOPLIMIT=(\d+)\s+FLOWLBL=(\d+)\s+
+                    PROTO=UDP(?:LITE)?\s+SPT=(\d+)\s+DPT=(\d+)\s+LEN=(\d+)/x) {
+
+                ($pkt_hr->{'src'}, $pkt_hr->{'dst'}, $pkt_hr->{'ip_len'},
+                    $pkt_hr->{'tc'}, $pkt_hr->{'hop_limit'},
+                    $pkt_hr->{'flow_label'}, $pkt_hr->{'sp'}, $pkt_hr->{'dp'},
+                    $pkt_hr->{'udp_len'}) = ($1,$2,$3,$4,$5,$6,$7,$8,$9);
+
+                $pkt_hr->{'s_obj'} = new6 NetAddr::IP($pkt_hr->{'src'})
+                    or return $PKT_ERROR;
+                $pkt_hr->{'d_obj'} = new6 NetAddr::IP($pkt_hr->{'dst'})
+                    or return $PKT_ERROR;
+
+            } else {
+                print STDERR "[-] err packet: strange IPv6 UDP format\n"
+                    if $debug;
+                return $PKT_ERROR;
+            }
+
+        } else {
+
+            ### May 18 22:21:26 orthanc kernel: DROP IN=eth2 OUT=
+            ### MAC=00:60:1d:23:d0:01:00:60:1d:23:d3:0e:08:00
+            ### SRC=192.168.20.25 DST=192.168.20.1 LEN=28 TOS=0x00 PREC=0x00
+            ### TTL=40 ID=47523 PROTO=UDP SPT=57339 DPT=305 LEN=8
+
+            if ($pkt_str =~ /SRC=($ipv4_re)\s+DST=($ipv4_re)\s+LEN=(\d+)\s+TOS=(\S+)
                       \s.*TTL=(\d+)\s+ID=(\d+)\s*.*\s+PROTO=UDP\s+
                       SPT=(\d+)\s+DPT=(\d+)\s+LEN=(\d+)/x) {
 
-        ($pkt_hr->{'src'}, $pkt_hr->{'dst'}, $pkt_hr->{'ip_len'},
-            $pkt_hr->{'tos'}, $pkt_hr->{'ttl'}, $pkt_hr->{'ip_id'},
-            $pkt_hr->{'sp'}, $pkt_hr->{'dp'}, $pkt_hr->{'udp_len'})
-                = ($1,$2,$3,$4,$5,$6,$7,$8,$9);
+                ($pkt_hr->{'src'}, $pkt_hr->{'dst'}, $pkt_hr->{'ip_len'},
+                    $pkt_hr->{'tos'}, $pkt_hr->{'ttl'}, $pkt_hr->{'ip_id'},
+                    $pkt_hr->{'sp'}, $pkt_hr->{'dp'}, $pkt_hr->{'udp_len'})
+                        = ($1,$2,$3,$4,$5,$6,$7,$8,$9);
 
-        $pkt_hr->{'proto'} = 'udp';
+                $pkt_hr->{'s_obj'} = new NetAddr::IP($pkt_hr->{'src'})
+                    or return $PKT_ERROR;
+                $pkt_hr->{'d_obj'} = new NetAddr::IP($pkt_hr->{'dst'})
+                    or return $PKT_ERROR;
 
-        ### make sure we have a "reasonable" packet (note that nmap
-        ### can scan port 0 and iptables can report this fact)
-        unless ($pkt_hr->{'ip_len'} >= 0
-                and $pkt_hr->{'tos'} and $pkt_hr->{'ttl'} >= 0
-                and $pkt_hr->{'ip_id'} >= 0 and $pkt_hr->{'proto'}
-                and $pkt_hr->{'sp'} >= 0 and $pkt_hr->{'dp'} >= 0
-                and $pkt_hr->{'udp_len'} >= 0) {
-
-            return $PKT_ERROR;
+            } else {
+                print STDERR "[-] err packet: strange IPv4 UDP format\n"
+                    if $debug;
+                return $PKT_ERROR;
+            }
         }
 
         ### see if we need to ignore this packet based on the
@@ -1561,28 +1828,78 @@ sub parse_NF_pkt_str() {
                 "$pkt_hr->{'dst'}\t$pkt_hr->{'dp'}\t$pkt_hr->{'proto'}";
         }
 
-    ### Nov 27 15:45:51 orthanc kernel: DROP IN=eth1 OUT= MAC=00:a0:cc:e2:1f:f2:00:
-    ### 20:78:10:70:e7:08:00 SRC=192.168.10.20 DST=192.168.10.1 LEN=84 TOS=0x00
-    ### PREC=0x00 TTL=64 ID=0 DF PROTO=ICMP TYPE=8 CODE=0 ID=61055 SEQ=256
+    } elsif ($is_icmp6 or $is_icmp) {
 
-    } elsif ($pkt_str =~ /SRC=($ip_re)\s+DST=($ip_re)\s+LEN=(\d+).*
-                      TTL=(\d+)\s+ID=(\d+).*PROTO=ICMP\s+TYPE=(\d+)\s+
-                      CODE=(\d+)\s+ID=(\d+)\s+SEQ=(\d+)/x) {
-
-        ($pkt_hr->{'src'}, $pkt_hr->{'dst'}, $pkt_hr->{'ip_len'},
-            $pkt_hr->{'ttl'}, $pkt_hr->{'ip_id'}, $pkt_hr->{'itype'},
-            $pkt_hr->{'icode'}, $pkt_hr->{'icmp_id'}, $pkt_hr->{'icmp_seq'})
-                = ($1,$2,$3,$4,$5,$6,$7,$8,$9);
-
-        $pkt_hr->{'proto'} = 'icmp';
         $pkt_hr->{'sp'} = $pkt_hr->{'dp'} = 0;
 
-        unless ($pkt_hr->{'ip_len'} >= 0 and $pkt_hr->{'ttl'} >= 0
-                and $pkt_hr->{'proto'} and $pkt_hr->{'itype'} >= 0
-                and $pkt_hr->{'icode'} >= 0 and $pkt_hr->{'ip_id'} >= 0
-                and $pkt_hr->{'icmp_seq'} >= 0) {
+        if ($is_ipv6) {
 
-            return $PKT_ERROR;
+            ### Jul 18 17:18:19 lorien kernel: [ 1786.520508] IPV6 packet IN=lo
+            ### OUT= MAC=00:00:00:00:00:00:00:00:00:00:00:00:86:dd
+            ### SRC=0000:0000:0000:0000:0000:0000:0000:0001
+            ### DST=0000:0000:0000:0000:0000:0000:0000:0001 LEN=104 TC=0
+            ### HOPLIMIT=255 FLOWLBL=0 PROTO=ICMPv6 TYPE=129 CODE=0 ID=14997 SEQ=1 
+
+            if ($pkt_str =~ /SRC=($ipv6_re)\s+DST=($ipv6_re)\s+LEN=(\d+)\s+TC=(\d+)\s+
+                    HOPLIMIT=(\d+)\s+FLOWLBL=(\d+)\s+PROTO=ICMPv6\s+TYPE=(\d+)\s+
+                    CODE=(\d+)/x) {
+
+                ($pkt_hr->{'src'}, $pkt_hr->{'dst'}, $pkt_hr->{'ip_len'},
+                    $pkt_hr->{'tc'}, $pkt_hr->{'hop_limit'},
+                    $pkt_hr->{'flow_label'}, $pkt_hr->{'itype'},
+                    $pkt_hr->{'icode'}) = ($1,$2,$3,$4,$5,$6,$7,$8);
+
+                $pkt_hr->{'s_obj'} = new6 NetAddr::IP($pkt_hr->{'src'})
+                    or return $PKT_ERROR;
+                $pkt_hr->{'d_obj'} = new6 NetAddr::IP($pkt_hr->{'dst'})
+                    or return $PKT_ERROR;
+
+            } else {
+                print STDERR "[-] err packet: strange IPv6 ICMP format\n"
+                    if $debug;
+                return $PKT_ERROR;
+            }
+
+            $pkt_hr->{'proto'} = 'icmp6';
+
+        } else {
+
+            ### Nov 27 15:45:51 orthanc kernel: DROP IN=eth1 OUT= MAC=00:a0:cc:e2:1f:f2:00:
+            ### 20:78:10:70:e7:08:00 SRC=192.168.10.20 DST=192.168.10.1 LEN=84 TOS=0x00
+            ### PREC=0x00 TTL=64 ID=0 DF PROTO=ICMP TYPE=8 CODE=0 ID=61055 SEQ=256
+
+            if ($pkt_str =~ /SRC=($ipv4_re)\s+DST=($ipv4_re)\s+LEN=(\d+).*
+                      TTL=(\d+)\s+ID=(\d+).*PROTO=ICMP\s+TYPE=(\d+)\s+
+                      CODE=(\d+)/x) {
+
+                ($pkt_hr->{'src'}, $pkt_hr->{'dst'}, $pkt_hr->{'ip_len'},
+                    $pkt_hr->{'ttl'}, $pkt_hr->{'ip_id'}, $pkt_hr->{'itype'},
+                    $pkt_hr->{'icode'}) = ($1,$2,$3,$4,$5,$6,$7);
+
+                $pkt_hr->{'s_obj'} = new NetAddr::IP($pkt_hr->{'src'})
+                    or return $PKT_ERROR;
+                $pkt_hr->{'d_obj'} = new NetAddr::IP($pkt_hr->{'dst'})
+                    or return $PKT_ERROR;
+
+            } else {
+                print STDERR "[-] err packet: strange IPv4 ICMP format\n"
+                    if $debug;
+                return $PKT_ERROR;
+            }
+
+            $pkt_hr->{'proto'} = 'icmp';
+
+            if ($pkt_hr->{'itype'} == $ICMP_ECHO_REQUEST
+                    or $pkt_hr->{'itype'} == $ICMP_ECHO_REPLY) {
+
+                ### we expect the ICMP ID and SEQ fields to be populated
+                if ($pkt_str =~ /CODE=(\d+)\s+ID=(\d+)\s+SEQ=(\d+)/) {
+                    $pkt_hr->{'icmp_id'}  = $1;
+                    $pkt_hr->{'icmp_seq'} = $2;
+                } else {
+                    return $PKT_ERROR;
+                }
+            }
         }
 
         ### see if we need to ignore this packet based on the
@@ -1606,15 +1923,21 @@ sub parse_NF_pkt_str() {
 
     if ($restrict_ip) {
         ### we are looking to analyze packets from a specific IP/subnet
-        if ($restrict_ip =~ m|$ip_re/\d+|) {
-            return $PKT_IGNORE unless
-                (ipv4_in_network($restrict_ip, $pkt_hr->{'src'})
-                or ipv4_in_network($restrict_ip, $pkt_hr->{'dst'}));
+        if ($pkt_hr->{'is_ipv6'}) {
+            if ($restrict_ip->version() == 6) {
+                return $PKT_IGNORE unless 
+                    $pkt_hr->{'s_obj'}->within($restrict_ip) or
+                    $pkt_hr->{'d_obj'}->within($restrict_ip);
+            }
         } else {
-            return $PKT_IGNORE unless $pkt_hr->{'src'} eq $restrict_ip
-                    or $pkt_hr->{'dst'} eq $restrict_ip;
+            if ($restrict_ip->version() == 4) {
+                return $PKT_IGNORE unless
+                    $pkt_hr->{'s_obj'}->within($restrict_ip) or
+                    $pkt_hr->{'d_obj'}->within($restrict_ip);
+            }
         }
     }
+
     return $PKT_SUCCESS;
 }
 
@@ -1636,26 +1959,46 @@ sub match_sigs() {
     print STDERR "[+] match_sigs()\n" if $debug and $verbose;
 
     ### always run the IP protocol sigs
-    for my $proto ($pkt_hr->{'proto'}, 'ip') {
+    PROTO: for my $proto ($pkt_hr->{'proto'}, 'ip') {
 
-        return 0, $NO_SIG_MATCH unless defined $sig_search{$proto};
+        next PROTO unless defined $sig_search{$proto};
 
         SRC: for my $src (keys %{$sig_search{$proto}}) {
-            print STDERR "[+] SRC: sig_ip: $src, pkt src: $pkt_hr->{'src'}\n"
+
+            print STDERR "[+] match_sigs() pkt src: $pkt_hr->{'src'} within sig src: $src ?..."
                 if $debug and $verbose;
-            next SRC unless &check_sig_ip($pkt_hr->{'src'}, $src);
+
+            if ($pkt_hr->{'s_obj'}->within($sig_ip_objs{$src})) {
+                print STDERR "yes\n"
+                    if $debug and $verbose;
+            } else {
+                print STDERR "no\n"
+                    if $debug and $verbose;
+                next SRC;
+            }
 
             DST: for my $dst (keys %{$sig_search{$proto}{$src}}) {
-                print STDERR "[+] DST: sig_ip: $dst, pkt src: $pkt_hr->{'dst'}\n"
+
+                print STDERR "[+] match_sigs() pkt dst: $pkt_hr->{'dst'} within sig dst: $dst ?..."
                     if $debug and $verbose;
-                next DST unless &check_sig_ip($pkt_hr->{'dst'}, $dst);
+
+                if ($pkt_hr->{'d_obj'}->within($sig_ip_objs{$dst})) {
+                    print STDERR "yes\n"
+                        if $debug and $verbose;
+                } else {
+                    print STDERR "no\n"
+                        if $debug and $verbose;
+                    next DST;
+                }
+
                 print STDERR "    Matched sig IP criteria.\n"
                     if $debug and $verbose;
-                if ($proto eq 'tcp' or $proto eq 'udp') {
 
-                    TYPE: for my $href (@port_types) {
-                        my $sp_type = $href->{'sp'};
-                        my $dp_type = $href->{'dp'};
+                if ($proto eq 'tcp' or $proto eq 'udp' or $proto eq 'udplite') {
+
+                    TYPE: for my $hr (@port_types) {
+                        my $sp_type = $hr->{'sp'};
+                        my $dp_type = $hr->{'dp'};
 
                         next TYPE unless
                             defined $sig_search{$proto}{$src}{$dst}{$sp_type};
@@ -1711,6 +2054,7 @@ sub match_sigs() {
 
                                         print STDERR "    match_snort_keywords() ",
                                             " return DL: $dl_tmp\n" if $debug;
+
                                         ### return maximal danger level from all
                                         ### signature matches
                                         $dl = $dl_tmp if $dl_tmp > $dl;
@@ -1747,7 +2091,8 @@ sub match_snort_keywords() {
     my $dl = 0;
     my $matched_sig = $NO_SIG_MATCH;
 
-    ### see if all Snort keywords match the packet
+    ### see if all Snort keywords match the packet - the sigs hash has
+    ### been restricted to the appropriate protocol
     SIG: for my $sid (keys %$sigs_ids_hr) {
 
         next SIG unless defined $sigs{$sid};  ### should never happen
@@ -1812,6 +2157,7 @@ sub match_snort_keywords() {
                 $top_sigs{$sid}++;
                 $top_sig_counts{$pkt_hr->{'src'}}++;
             }
+
         } elsif ($sig_hr->{'proto'} eq 'udp') {
 
             ($rv, $sig_match_rv) = &match_snort_udp_keywords($pkt_hr, $sig_hr);
@@ -1840,31 +2186,8 @@ sub match_snort_keywords() {
                 $top_sigs{$sid}++;
                 $top_sig_counts{$pkt_hr->{'src'}}++;
             }
+
         } elsif ($sig_hr->{'proto'} eq 'icmp') {
-
-            ### validate icmp type and code fields against the official values
-            ### in RFC 792.  See %inval_type_code for corresponding signature
-            ### message text and danger levels.
-            my $type_code_rv = &check_icmp_type($pkt_hr->{'itype'},
-                    $pkt_hr->{'icode'});
-
-            if ($type_code_rv == $BAD_ICMP_TYPE) {  ### bad type
-
-                $dl = 2 if $dl < 2;
-
-                $scan{$pkt_hr->{'src'}}{$pkt_hr->{'dst'}}{'icmp'}
-                    {'invalid_type'}{$pkt_hr->{'itype'}}
-                    {$pkt_hr->{'chain'}}{'pkts'}++;
-
-            } elsif ($type_code_rv == $BAD_ICMP_CODE) {
-
-                $dl = 2 if $dl < 2;
-
-                $scan{$pkt_hr->{'src'}}{$pkt_hr->{'dst'}}{'icmp'}
-                    {'invalid_code'}{$pkt_hr->{'itype'}}{$pkt_hr->{'icode'}}
-                    {$pkt_hr->{'chain'}}{'pkts'}++;
-            }
-            $dl = $dl_tmp if $dl_tmp > $dl;
 
             ($rv, $sig_match_rv) = &match_snort_icmp_keywords($pkt_hr, $sig_hr);
 
@@ -1888,8 +2211,10 @@ sub match_snort_keywords() {
                 $top_sigs{$sid}++;
                 $top_sig_counts{$pkt_hr->{'src'}}++;
             }
-        }
 
+        } elsif ($sig_hr->{'proto'} eq 'icmp6') {
+            ### FIXME icmp6 specifc Snort matches?
+        }
     }
     return $dl, $matched_sig;
 }
@@ -1917,22 +2242,35 @@ sub match_snort_tcp_keywords() {
         ### extend the header length to compensate for TCP options
         $header_len += $TCP_MAX_OPTS_LEN;
     }
-    return 0, $NO_SIG_MATCH unless &check_sig_int_range(
-            ($pkt_hr->{'ip_len'}-$header_len), 'dsize', $sig_hr);
 
-    return 0, $NO_SIG_MATCH unless &check_sig_int_range(
-            ($pkt_hr->{'ip_len'}-$header_len), 'psad_dsize', $sig_hr);
+    if (defined $sig_hr->{'dsize'} and defined $sig_hr->{'dsize_s'}) {
+        return 0, $NO_SIG_MATCH unless &check_sig_int_range(
+                ($pkt_hr->{'ip_len'}-$header_len), 'dsize', $sig_hr);
+    }
 
-    return 0, $NO_SIG_MATCH
-        unless &check_sig_int_range($pkt_hr->{'win'}, 'window', $sig_hr);
-    return 0, $NO_SIG_MATCH
-        unless &check_sig_int_range($pkt_hr->{'tcp_seq'}, 'seq', $sig_hr);
-    return 0, $NO_SIG_MATCH
-        unless &check_sig_int_range($pkt_hr->{'tcp_ack'}, 'ack', $sig_hr);
+    if (defined $sig_hr->{'psad_dsize'} and defined $sig_hr->{'psad_dsize_s'}) {
+        return 0, $NO_SIG_MATCH unless &check_sig_int_range(
+                ($pkt_hr->{'ip_len'}-$header_len), 'psad_dsize', $sig_hr);
+    }
+
+    if (defined $sig_hr->{'window'} and defined $sig_hr->{'window_s'}) {
+        return 0, $NO_SIG_MATCH
+            unless &check_sig_int_range($pkt_hr->{'win'}, 'window', $sig_hr);
+    }
+
+    if (defined $sig_hr->{'seq'} and defined $sig_hr->{'seq_s'}) {
+        return 0, $NO_SIG_MATCH
+            unless &check_sig_int_range($pkt_hr->{'tcp_seq'}, 'seq', $sig_hr);
+    }
+
+    if (defined $sig_hr->{'ack'} and defined $sig_hr->{'ack_s'}) {
+        return 0, $NO_SIG_MATCH
+            unless &check_sig_int_range($pkt_hr->{'tcp_ack'}, 'ack', $sig_hr);
+    }
 
     ### matched the signature
     if ($debug) {
-        print STDERR "[+] packet matched matched tcp keywords for sid: ",
+        print STDERR "[+] packet matched tcp keywords for sid: ",
             "$sig_hr->{'sid'} (psad_id: $sig_hr->{'psad_id'})\n",
             qq|    "$sig_hr->{'msg'}"\n|;
     }
@@ -1943,13 +2281,17 @@ sub match_snort_tcp_keywords() {
 sub match_snort_udp_keywords() {
     my ($pkt_hr, $sig_hr) = @_;
 
-    return 0, $NO_SIG_MATCH unless &check_sig_int_range(
-            ($pkt_hr->{'udp_len'}-$UDP_HEADER_LEN),
-            'dsize', $sig_hr);
+    if (defined $sig_hr->{'dsize'} and defined $sig_hr->{'dsize_s'}) {
+        return 0, $NO_SIG_MATCH unless &check_sig_int_range(
+                ($pkt_hr->{'udp_len'}-$UDP_HEADER_LEN),
+                'dsize', $sig_hr);
+    }
 
-    return 0, $NO_SIG_MATCH unless &check_sig_int_range(
-            ($pkt_hr->{'udp_len'}-$UDP_HEADER_LEN),
-            'psad_dsize', $sig_hr);
+    if (defined $sig_hr->{'psad_dsize'} and defined $sig_hr->{'psad_dsize_s'}) {
+        return 0, $NO_SIG_MATCH unless &check_sig_int_range(
+                ($pkt_hr->{'udp_len'}-$UDP_HEADER_LEN),
+                'psad_dsize', $sig_hr);
+    }
 
     ### matched the signature
     if ($debug) {
@@ -1964,22 +2306,34 @@ sub match_snort_udp_keywords() {
 sub match_snort_icmp_keywords() {
     my ($pkt_hr, $sig_hr) = @_;
 
-    return 0, $NO_SIG_MATCH unless &check_sig_int_range(
-            ($pkt_hr->{'ip_len'}-$IP_HEADER_LEN-$ICMP_HEADER_LEN),
-            'dsize', $sig_hr);
+    if (defined $sig_hr->{'dsize'} and defined $sig_hr->{'dsize_s'}) {
+        return 0, $NO_SIG_MATCH unless &check_sig_int_range(
+                ($pkt_hr->{'ip_len'}-$IP_HEADER_LEN-$ICMP_HEADER_LEN),
+                'dsize', $sig_hr);
+    }
 
-    return 0, $NO_SIG_MATCH unless &check_sig_int_range(
-            ($pkt_hr->{'ip_len'}-$IP_HEADER_LEN-$ICMP_HEADER_LEN),
-            'psad_dsize', $sig_hr);
+    if (defined $sig_hr->{'psad_dsize'} and defined $sig_hr->{'psad_dsize_s'}) {
+        return 0, $NO_SIG_MATCH unless &check_sig_int_range(
+                ($pkt_hr->{'ip_len'}-$IP_HEADER_LEN-$ICMP_HEADER_LEN),
+                'psad_dsize', $sig_hr);
+    }
 
-    return 0, $NO_SIG_MATCH
-        unless &check_sig_int_range($pkt_hr->{'itype'}, 'itype', $sig_hr);
-    return 0, $NO_SIG_MATCH
-        unless &check_sig_int_range($pkt_hr->{'icode'}, 'icode', $sig_hr);
-    return 0, $NO_SIG_MATCH
-        unless &check_sig_int_range($pkt_hr->{'icmp_seq'}, 'icmp_seq', $sig_hr);
-    return 0, $NO_SIG_MATCH
-        unless &check_sig_int_range($pkt_hr->{'icmp_id'}, 'icmp_id', $sig_hr);
+    if (defined $sig_hr->{'itype'} and defined $sig_hr->{'itype_s'}) {
+        return 0, $NO_SIG_MATCH
+            unless &check_sig_int_range($pkt_hr->{'itype'}, 'itype', $sig_hr);
+    }
+    if (defined $sig_hr->{'icode'} and defined $sig_hr->{'icode_s'}) {
+        return 0, $NO_SIG_MATCH
+            unless &check_sig_int_range($pkt_hr->{'icode'}, 'icode', $sig_hr);
+    }
+    if (defined $sig_hr->{'icmp_seq'} and defined $sig_hr->{'icmp_seq_s'}) {
+        return 0, $NO_SIG_MATCH
+            unless &check_sig_int_range($pkt_hr->{'icmp_seq'}, 'icmp_seq', $sig_hr);
+    }
+    if (defined $sig_hr->{'icmp_id'} and defined $sig_hr->{'icmp_id_s'}) {
+        return 0, $NO_SIG_MATCH
+            unless &check_sig_int_range($pkt_hr->{'icmp_id'}, 'icmp_id', $sig_hr);
+    }
 
     ### matched the signature
     if ($debug) {
@@ -1994,15 +2348,26 @@ sub match_snort_icmp_keywords() {
 sub match_snort_ip_keywords() {
     my ($pkt_hr, $sig_hr) = @_;
 
-    return 0, $NO_SIG_MATCH
-        unless &check_sig_int_range($pkt_hr->{'ttl'}, 'ttl', $sig_hr);
+    if ($pkt_hr->{'is_ipv6'}) {
+        ### we need to build IPv6 signature keywords
+        return 1, $NO_SIG_MATCH;
+    }
 
-    return 0, $NO_SIG_MATCH
-        unless &check_sig_int_range($pkt_hr->{'ip_id'}, 'id', $sig_hr);
+    if (defined $sig_hr->{'ttl'} and defined $sig_hr->{'ttl_s'}) {
+        return 0, $NO_SIG_MATCH
+            unless &check_sig_int_range($pkt_hr->{'ttl'}, 'ttl', $sig_hr);
+    }
 
-    return 0, $NO_SIG_MATCH
-        unless &check_sig_int_range($pkt_hr->{'ip_len'},
-                'psad_ip_len', $sig_hr);
+    if (defined $sig_hr->{'id'} and defined $sig_hr->{'id_s'}) {
+        return 0, $NO_SIG_MATCH
+            unless &check_sig_int_range($pkt_hr->{'ip_id'}, 'id', $sig_hr);
+    }
+
+    if (defined $sig_hr->{'psad_ip_len'} and defined $sig_hr->{'psad_ip_len_s'}) {
+        return 0, $NO_SIG_MATCH
+            unless &check_sig_int_range($pkt_hr->{'ip_len'},
+                    'psad_ip_len', $sig_hr);
+    }
 
     ### to handle the ip_proto keyword parse_NF_pkt_str() would have to be
     ### modified to handle packets besides TCP, UDP, and ICMP.
@@ -2047,10 +2412,6 @@ sub check_sig_int_range() {
     my ($pkt_val, $keyword, $sig_hr) = @_;
 
     $pkt_val = 0 if $pkt_val < 0;
-
-    ### if the Snort signature does not have this keyword then
-    ### return true
-    return 1 unless defined $sig_hr->{"${keyword}_s"};
 
     if ($sig_hr->{"${keyword}_neg"}) {
         if ($pkt_val <= $sig_hr->{"${keyword}_e"}
@@ -2104,20 +2465,6 @@ sub check_sig_ipopts() {
     return 1;
 }
 
-sub check_sig_ip() {
-    my ($pkt_ip, $sig_ip) = @_;
-
-    return 1 if $sig_ip eq 'any';
-
-    if ($sig_ip =~ m|$ip_re/\d+|) {
-        return 1 if ipv4_in_network($sig_ip, $pkt_ip);
-    } elsif ($sig_ip =~ m|$ip_re|) {
-        return 1 if $pkt_ip eq $sig_ip;
-    }
-
-    return 0;
-}
-
 sub check_ignore_port() {
     my ($port, $proto) = @_;
     return 0 unless defined $ignore_ports{$proto};
@@ -2125,13 +2472,13 @@ sub check_ignore_port() {
 }
 
 sub match_port() {
-    my ($href, $port) = @_;
-    if (defined $href->{'port'}) {
-        return 1 if defined $href->{'port'}->{$port};
+    my ($hr, $port) = @_;
+    if (defined $hr->{'port'}) {
+        return 1 if defined $hr->{'port'}->{$port};
     }
-    if (defined $href->{'range'}) {
-        for my $low_port (keys %{$href->{'range'}}) {
-            my $high_port = $href->{'range'}->{$low_port};
+    if (defined $hr->{'range'}) {
+        for my $low_port (keys %{$hr->{'range'}}) {
+            my $high_port = $hr->{'range'}->{$low_port};
             return 1 if ($port >= $low_port and $port <= $high_port);
         }
     }
@@ -2139,14 +2486,50 @@ sub match_port() {
 }
 
 sub p0f() {
-    my ($src, $len, $frag_bit, $ttl, $win, $tcp_options) = @_;
+    my $pkt_hr = shift;
 
-    print STDERR "[+] p0f(): $src len: $len, frag_bit: $frag_bit, " ,
-        "ttl: $ttl, win: $win\n" if $debug;
+    if ($pkt_hr->{'is_ipv6'}) {
+        &p0f_ipv6($pkt_hr);
+    } else {
+        &p0f_ipv4($pkt_hr);
+    }
+    return;
+}
 
-    my $options_aref = &parse_tcp_options($src, $tcp_options);
+sub p0f_ipv6() {
+    my $pkt_hr = shift;
+    return;
+}
 
-    unless ($options_aref) {
+sub p0f_ipv4() {
+    my $pkt_hr = shift;
+
+    print STDERR "[+] p0f_ipv4(): $pkt_hr->{'src'} len: $pkt_hr->{'ip_len'}, ",
+        "frag_bit: $pkt_hr->{'frag_bit'}, ttl: $pkt_hr->{'ttl'}, ",
+        "win: $pkt_hr->{'win'}\n" if $debug;
+
+    # p0f Fingerprint entry format:
+    #
+    # wwww:ttt:D:ss:OOO...:OS:Version:Subtype:Details
+    #
+    # wwww     - window size (can be *, %nnn, Snn or Tnn).  The special values
+    #            "S" and "T" which are a multiple of MSS or a multiple of MTU
+    #            respectively.
+    # ttt      - initial TTL
+    # D        - don't fragment bit (0 - not set, 1 - set)
+    # ss       - overall SYN packet size
+    # OOO      - option value and order specification (see below)
+    # OS       - OS genre (Linux, Solaris, Windows)
+    # Version  - OS Version (2.0.27 on x86, etc)
+    # Subtype  - OS subtype or patchlevel (SP3, lo0)
+    # details  - Generic OS details
+    #
+    ### S4:64:1:60:M*,S,T,N,W7:     Linux:2.6:8:Linux 2.6.8 and newer (?)
+
+    my $options_ar = &parse_tcp_options($pkt_hr->{'src'},
+            $pkt_hr->{'tcp_opts'});
+
+    unless ($options_ar) {
         print STDERR "[-] Could not fingerprint remote OS.\n" if $debug;
         return;
     }
@@ -2154,59 +2537,59 @@ sub p0f() {
     my $matched_os = 0;
 
     ### try to match SYN packet length
-    LEN: for my $sig_len (keys %p0f_sigs) {
+    LEN: for my $sig_len (keys %p0f_ipv4_sigs) {
         my $matched_len = 0;
         if ($sig_len eq '*') {  ### len can be wildcarded in pf.os
             $matched_len = 1;
         } elsif ($sig_len =~ /^\%(\d+)/) {
-            if (($len % $1) == 0) {
+            if (($pkt_hr->{'ip_len'} % $1) == 0) {
                 $matched_len = 1;
             }
-        } elsif ($len == $sig_len) {
+        } elsif ($pkt_hr->{'ip_len'} == $sig_len) {
             $matched_len = 1;
         }
         next LEN unless $matched_len;
 
         ### try to match fragmentation bit
-        FRAG: for my $test_frag_bit ($frag_bit, '*') {  ### don't need "%nnn" check
-            next FRAG unless defined $p0f_sigs{$sig_len}{$test_frag_bit};
+        FRAG: for my $test_frag_bit ($pkt_hr->{'frag_bit'}, '*') {  ### don't need "%nnn" check
+            next FRAG unless defined $p0f_ipv4_sigs{$sig_len}{$test_frag_bit};
 
             ### find out for which p0f sigs the TTL is within range
-            TTL: for my $sig_ttl (keys %{$p0f_sigs{$sig_len}{$test_frag_bit}}) {
-                unless ($ttl > $sig_ttl - $config{'MAX_HOPS'}
-                        and $ttl <= $sig_ttl) {
+            TTL: for my $sig_ttl (keys %{$p0f_ipv4_sigs{$sig_len}{$test_frag_bit}}) {
+                unless ($pkt_hr->{'ttl'} > $sig_ttl - $config{'MAX_HOPS'}
+                        and $pkt_hr->{'ttl'} <= $sig_ttl) {
                     next TTL;
                 }
 
                 ### match tcp window size
                 WIN: for my $sig_win_size (keys
-                        %{$p0f_sigs{$sig_len}{$test_frag_bit}{$sig_ttl}}) {
+                        %{$p0f_ipv4_sigs{$sig_len}{$test_frag_bit}{$sig_ttl}}) {
                     my $matched_win_size = 0;
                     if ($sig_win_size eq '*') {
                         $matched_win_size = 1;
                     } elsif ($sig_win_size =~ /^\%(\d+)/) {
-                        if (($win % $1) == 0) {
+                        if (($pkt_hr->{'win'} % $1) == 0) {
                             $matched_win_size = 1;
                         }
                     } elsif ($sig_win_size =~ /^S(\d+)/) {
                         ### window size must be a multiple of maximum
                         ### seqment size
                         my $multiple = $1;
-                        for my $opt_hr (@$options_aref) {
+                        for my $opt_hr (@$options_ar) {
                             if (defined $opt_hr->{$tcp_p0f_opt_types{'M'}}) {
                                 my $mss_val = $opt_hr->{$tcp_p0f_opt_types{'M'}};
-                                if ($win == $mss_val * $multiple) {
+                                if ($pkt_hr->{'win'} == $mss_val * $multiple) {
                                     $matched_win_size = 1;
                                 }
                             }
                             last;
                         }
-                    } elsif ($sig_win_size == $win) {
+                    } elsif ($sig_win_size == $pkt_hr->{'win'}) {
                         $matched_win_size = 1;
                     }
 
                     next WIN unless $matched_win_size;
-                    TCPOPTS: for my $sig_opts (keys %{$p0f_sigs{$sig_len}
+                    TCPOPTS: for my $sig_opts (keys %{$p0f_ipv4_sigs{$sig_len}
                             {$test_frag_bit}{$sig_ttl}{$sig_win_size}}) {
                         my @sig_opts = split /\,/, $sig_opts;
                         for (my $i=0; $i<=$#sig_opts; $i++) {
@@ -2216,7 +2599,7 @@ sub p0f() {
                             if ($sig_opts[$i] =~ /^([NMWST])/) {
                                 my $sig_letter = $1;
 
-                                unless (defined $options_aref->[$i]->
+                                unless (defined $options_ar->[$i]->
                                         {$tcp_p0f_opt_types{$sig_letter}}) {
                                     next TCPOPTS;  ### could not match tcp option order
                                 }
@@ -2226,30 +2609,30 @@ sub p0f() {
                                 if ($sig_letter eq 'M') {
                                     if ($sig_opts[$i] =~ /M(\d+)/) {
                                         my $sig_mss_val = $1;
-                                        next TCPOPTS unless $options_aref->[$i]->
+                                        next TCPOPTS unless $options_ar->[$i]->
                                             {$tcp_p0f_opt_types{$sig_letter}}
                                                 == $sig_mss_val;
                                     } elsif ($sig_opts[$i] =~ /M\%(\d+)/) {
                                         my $sig_mss_mod_val = $1;
-                                        next TCPOPTS unless (($options_aref->[$i]->
+                                        next TCPOPTS unless (($options_ar->[$i]->
                                             {$tcp_p0f_opt_types{$sig_letter}}
                                                 % $sig_mss_mod_val) == 0);
                                     } ### else it is "M*" which always matches
                                 } elsif ($sig_letter eq 'W') {
                                     if ($sig_opts[$i] =~ /W(\d+)/) {
                                         my $sig_win_val = $1;
-                                        next TCPOPTS unless $options_aref->[$i]->
+                                        next TCPOPTS unless $options_ar->[$i]->
                                             {$tcp_p0f_opt_types{$sig_letter}}
                                                 == $sig_win_val;
                                     } elsif ($sig_opts[$i] =~ /W\%(\d+)/) {
                                         my $sig_win_mod_val = $1;
-                                        next TCPOPTS unless (($options_aref->[$i]->
+                                        next TCPOPTS unless (($options_ar->[$i]->
                                             {$tcp_p0f_opt_types{$sig_letter}}
                                                 % $sig_win_mod_val) == 0);
                                     } ### else it is "W*" which always matches
                                 } elsif ($sig_letter eq 'T') {
                                     if ($sig_opts[$i] =~ /T0/) {
-                                        next TCPOPTS unless $options_aref->[$i]->
+                                        next TCPOPTS unless $options_ar->[$i]->
                                             {$tcp_p0f_opt_types{$sig_letter}}
                                                 == 0;
                                     }  ### else it is just "T" which matches
@@ -2257,15 +2640,15 @@ sub p0f() {
 
                             }
                         }
-                        OS: for my $os (keys %{$p0f_sigs{$sig_len}
+                        OS: for my $os (keys %{$p0f_ipv4_sigs{$sig_len}
                                 {$test_frag_bit}{$sig_ttl}{$sig_win_size}
                                 {$sig_opts}}) {
-                            my $sig = $p0f_sigs{$sig_len}
+                            my $sig = $p0f_ipv4_sigs{$sig_len}
                                 {$test_frag_bit}{$sig_ttl}{$sig_win_size}
                                 {$sig_opts}{$os};
                             print STDERR "[+] os: $os, $sig\n" if $debug;
                             $matched_os = 1;
-                            $p0f{$src}{$os} = '';
+                            $p0f{$pkt_hr->{'src'}}{$os} = '';
                         }
                     }
                 }
@@ -2273,7 +2656,7 @@ sub p0f() {
         }
     }
     if ($debug and not $matched_os) {
-        print STDERR "    Could not match $src against any p0f signature.\n";
+        print STDERR "    Could not match $pkt_hr->{'src'} against any p0f signature.\n";
     }
     return;
 }
@@ -2283,6 +2666,11 @@ sub parse_tcp_options() {
     my @opts = ();
     my @hex_nums = ();
     my $debug_str = '';
+
+    unless ($tcp_options) {
+        print STDERR 'no tcp options' if $debug;
+        return [];
+    }
 
     if (length($tcp_options) % 2 != 0) {  ### make sure length is a multiple of two
         print STDERR 'tcp options length not a multiple of two.' if $debug;
@@ -2352,7 +2740,7 @@ sub parse_tcp_options() {
             if ($len == 0 or $len == 1) {
                 ### this should never happen; it indicates a broken TCP stack
                 ### or maliciously constructed options since the len field is
-                ### large enough to accomodate the TLV encoding
+                ### not large enough to accomodate the TLV encoding
                 my $msg = "broken $len-byte len field within TCP options " .
                     "string: $tcp_options from source IP: $src";
                 print STDERR "    $msg\n" if $debug;
@@ -2419,7 +2807,30 @@ sub parse_ip_options() {
 }
 
 sub posf() {
-    my ($src, $len, $tos, $ttl, $id, $win) = @_;
+    my $pkt_hr = shift;
+
+    if ($pkt_hr->{'is_ipv6'}) {
+        &posf_ipv6($pkt_hr);
+    } else {
+        &posf_ipv4($pkt_hr);
+    }
+    return;
+}
+
+sub posf_ipv6() {
+    my $pkt_hr = shift;
+    return;
+}
+
+sub posf_ipv4() {
+    my $pkt_hr = shift;
+
+    my $src = $pkt_hr->{'src'};
+    my $len = $pkt_hr->{'ip_len'};
+    my $tos = $pkt_hr->{'tos'};
+    my $ttl = $pkt_hr->{'ttl'};
+    my $id  = $pkt_hr->{'ip_id'};
+    my $win = $pkt_hr->{'win'};
 
     my $min_ttl;
     my $max_ttl;
@@ -2466,10 +2877,10 @@ sub id_incr() {
 }
 
 sub ttl_range() {
-    my $href = shift;
+    my $hr = shift;
     my $min_ttl = 256;
     my $max_ttl = 0;
-    for my $ttl (keys %$href) {
+    for my $ttl (keys %$hr) {
         $min_ttl = $ttl if $ttl < $min_ttl;
         $max_ttl = $ttl if $ttl > $max_ttl;
     }
@@ -2551,6 +2962,32 @@ sub add_fwsnort_sid() {
     return 0, $NO_SIG_MATCH;
 }
 
+sub delete_old_scans() {
+
+    my $current_time = time();
+
+    print STDERR "[+] delete_old_scans()\n" if $debug;
+
+    ### see if we need to timeout any old scans
+    for my $src (keys %scan) {
+        for my $dst (keys %{$scan{$src}}) {
+            next unless defined $scan{$src}{$dst}{'s_time'};
+            if (($current_time - $scan{$src}{$dst}{'s_time'})
+                    >= $config{'SCAN_TIMEOUT'}) {
+                print STDERR "    delete old scan $src -> $dst\n"
+                    if $debug;
+
+                delete $scan{$src}{$dst};
+
+                if ($config{'MAX_SCAN_IP_PAIRS'} > 0) {
+                    $scan_ip_pairs-- if $scan_ip_pairs > 0;
+                }
+            }
+        }
+    }
+    return;
+}
+
 sub dshield_email_log() {
     ### dshield alert interval is in hours.  Check to see if there are more
     ### than 10,000 lines of log data (and if the last alert was sent more than
@@ -2574,7 +3011,7 @@ sub dshield_email_log() {
                 "Could not open $config{'DSHIELD_EMAIL_FILE'}: $!";
             if ($config{'DSHIELD_DL_THRESHOLD'} > 0) {
                 for my $line (@dshield_data) {
-                    if ($line =~ /^.*?($ip_re)/) {
+                    if ($line =~ /^.*?($ipv4_re)/) {
                         my $src = $1;
                         if (defined $scan_dl{$src}
                                 and ($scan_dl{$src}
@@ -2604,7 +3041,7 @@ sub dshield_email_log() {
                 "Subject: $subject\n";
             if ($config{'DSHIELD_DL_THRESHOLD'} > 0) {
                 for my $line (@dshield_data) {
-                    if ($line =~ /^.*?($ip_re)/) {
+                    if ($line =~ /^.*?($ipv4_re)/) {
                         my $src = $1;
                         if (defined $scan_dl{$src}
                                 and ($scan_dl{$src}
@@ -2643,10 +3080,16 @@ sub dshield_email_log() {
 }
 
 sub check_icmp_type() {
-    my ($type, $code) = @_;
-    return $BAD_ICMP_TYPE if not defined $valid_icmp_types{$type};
-    return $BAD_ICMP_CODE if not defined
-            $valid_icmp_types{$type}{'codes'}{$code};
+    my ($proto, $valid_types_hr, $type, $code) = @_;
+    print STDERR "    check_icmp_type(type: $type, code: $code)\n" if $debug;
+    if (not defined $valid_types_hr->{$type}) {
+        print STDERR "        bad $proto type\n" if $debug;
+        return $BAD_ICMP_TYPE;
+    } elsif (not defined $valid_types_hr->{$type}->{'codes'}->{$code}) {
+        print STDERR "        bad $proto code\n" if $debug;
+        return $BAD_ICMP_CODE;
+    }
+    print STDERR "        valid $proto type/code\n" if $debug;
     return 0;
 }
 
@@ -2665,16 +3108,18 @@ sub import_perl_modules() {
     }
 
     require IPTables::ChainMgr;
-    require Net::IPv4Addr;
+    require NetAddr::IP;
     require Date::Calc;
     require Unix::Syslog;
+    require Cwd;
     require Storable if $store_file;
 
-    Net::IPv4Addr->import(qw(ipv4_network ipv4_in_network ipv4_broadcast ipv4_cidr2msk));
     Date::Calc->import(qw(Timezone This_Year Decode_Month
-            Today Date_to_Time Mktime Localtime));
+            Today Date_to_Time This_Year Mktime Localtime));
     Unix::Syslog->import(qw(:subs :macros));
     Storable->import(qw(retrieve store)) if $store_file;
+
+    $imported_syslog_module = 1;
 
     return;
 }
@@ -2723,7 +3168,9 @@ sub psad_init() {
     ### turn off buffering
     $| = 1;
 
-    $no_syslog_alerts = 1 if $analyze_mode or $status_mode;
+    $no_syslog_alerts = 1 if $analyze_mode or $status_mode or $test_mode;
+    $no_email_alerts = 1 if $test_mode;
+    $debug = 1 if $test_mode;
 
     ### import any override config files first
     &import_override_configs() if $override_config_str;
@@ -2832,10 +3279,13 @@ sub psad_init() {
     ### import icmp types and codes from psad_icmp_types; icmp "type"
     ### and "code" fields will be validated against the values in this
     ### file.
-    &import_icmp_types() unless $no_icmp_types;
+    &import_icmp_types('icmp', \%valid_icmp_types, $config{'ICMP_TYPES_FILE'})
+        unless $no_icmp_types;
+    &import_icmp_types('icmp6', \%valid_icmp6_types,
+        $config{'ICMP6_TYPES_FILE'}) unless $no_icmp6_types;
 
     ### import p0f-based passive OS fingerprinting signatures
-    &import_p0f_sigs() unless $no_posf;
+    &import_p0f_ipv4_sigs() unless $no_posf;
 
     ### import TOS-based passive OS fingerprinting signatures
     &import_posf_sigs() unless $no_posf;
@@ -2885,6 +3335,11 @@ sub psad_init() {
     ### dump config
     &dump_conf() if $debug;
 
+    if ($restrict_ip_cmdline) {
+        $restrict_ip = new NetAddr::IP $restrict_ip_cmdline
+            or die "[*] Could not acquire NetAddr::IP object for $restrict_ip";
+    }
+
     return;
 }
 
@@ -2913,9 +3368,9 @@ sub validate_config() {
     if ($config{'ENABLE_AUTO_IDS'} eq 'Y'
             and $config{'IPTABLES_BLOCK_METHOD'} eq 'N'
             and $config{'TCPWRAPPERS_BLOCK_METHOD'} eq 'N') {
-        &sys_log('config warning, ENABLE_AUTO_IDS=Y, but ' .
+        die 'config warning, ENABLE_AUTO_IDS=Y, but ' .
             'both IPTABLES_BLOCK_METHOD and TCPWRAPPERS_BLOCK_METHOD are ' .
-            'set to N.');
+            'set to N.';
     }
     if ($status_min_dl and $status_min_dl > 5) {
         die '[*] The --status-dl must be between 1 and 5.';
@@ -2929,18 +3384,18 @@ sub validate_config() {
     }
 
     if ($fw_block_ip) {
-        unless ($fw_block_ip =~ m|^\s*$ip_re\s*$|
-                or $fw_block_ip =~ m|^\s*$ip_re/\d+\s*$|
-                or $fw_block_ip =~ m|^\s*$ip_re/$ip_re\s*$|) {
+        unless ($fw_block_ip =~ m|^\s*$ipv4_re\s*$|
+                or $fw_block_ip =~ m|^\s*$ipv4_re/\d+\s*$|
+                or $fw_block_ip =~ m|^\s*$ipv4_re/$ipv4_re\s*$|) {
             die '[*] The --fw-block-ip argument accepts ' .
                 'an IP address or network.';
         }
     }
 
     if ($fw_rm_block_ip) {
-        unless ($fw_rm_block_ip =~ m|^\s*$ip_re\s*$|
-                or $fw_rm_block_ip =~ m|^\s*$ip_re/\d+\s*$|
-                or $fw_rm_block_ip =~ m|^\s*$ip_re/$ip_re\s*$|) {
+        unless ($fw_rm_block_ip =~ m|^\s*$ipv4_re\s*$|
+                or $fw_rm_block_ip =~ m|^\s*$ipv4_re/\d+\s*$|
+                or $fw_rm_block_ip =~ m|^\s*$ipv4_re/$ipv4_re\s*$|) {
             die '[*] The --fw-rm-block-ip argument accepts ' .
                 'an IP address or network.';
         }
@@ -2992,7 +3447,9 @@ sub check_enable_vars_value() {
         next unless $var =~ /^ENABLE_/;
         ### make sure that all of the "ENABLE_" vars have a value of
         ### 'Y' or 'N'
-        unless ($config{$var} eq 'Y' or $config{$var} eq 'N') {
+        $config{$var} = uc($config{$var});
+        unless ($config{$var} eq 'Y' or $config{$var} eq 'N'
+                or $config{$var} eq 'YES' or $config{$var} eq 'NO') {
             die "[*] $var variable must be 'Y' or 'N'";
         }
     }
@@ -3008,8 +3465,9 @@ sub is_digit_range() {
 }
 
 sub get_connected_subnets() {
+
     my @connected_subnets = ();
-    my @connected_subnets_cidr = ();
+
     if ($config{'IFCFGTYPE'} =~ /iproute2/i) {
         my @ip_out = @{&run_command($cmds{'ip'}, 'addr')};
         my $intf_name    = '';
@@ -3021,12 +3479,10 @@ sub get_connected_subnets() {
             }
             next if $intf_name eq 'lo';
             next if $intf_name =~ /dummy/i;
-            if ($line =~ /^\s+inet.*?($ip_re)\/(\d+)/i) {
-                my $ip = $1;
-                my $msk = ipv4_cidr2msk($2);
-                my ($net_addr, $cidr_msk) = ipv4_network($ip, $msk);
-                push @connected_subnets, "$net_addr/$msk";
-                push @connected_subnets_cidr, "$net_addr/$cidr_msk";
+            if ($line =~ /^\s+inet.*?($ipv4_re)\/(\d+)/i) {
+                push @connected_subnets, new NetAddr::IP($1, $2);
+            } elsif ($line =~ /inet6\s(\S+)/) {
+                push @connected_subnets, new6 NetAddr::IP($1);
             }
         }
     } else {
@@ -3040,16 +3496,14 @@ sub get_connected_subnets() {
             }
             next if $intf_name eq 'lo';
             next if $intf_name =~ /dummy/i;
-            if ($line =~ /^\s+inet.*?:($ip_re).*:($ip_re)/i) {
-                my $ip  = $1;
-                my $msk = $2;
-                my ($net_addr, $cidr_msk) = ipv4_network($ip, $msk);
-                push @connected_subnets, "$net_addr/$msk";
-                push @connected_subnets_cidr, "$net_addr/$cidr_msk";
+            if ($line =~ /^\s+inet.*?:($ipv4_re).*:($ipv4_re)/i) {
+                push @connected_subnets, new NetAddr::IP($1, $2);
+            } elsif ($line =~ /^\s+inet6\saddr:\s+(\S+)/) {
+                push @connected_subnets, new6 NetAddr::IP($1);
             }
         }
     }
-    return \@connected_subnets, \@connected_subnets_cidr;
+    return \@connected_subnets;
 }
 
 sub validate_home_net() {
@@ -3059,15 +3513,14 @@ sub validate_home_net() {
     return if $config{'HOME_NET'} eq 'any'
         and $config{'ENABLE_INTF_LOCAL_NETS'} eq 'N';
 
-    my ($connected_subnets_ar, $connected_subnets_cidr_ar)
-        = &get_connected_subnets();
+    my $connected_subnets_ar = &get_connected_subnets();
 
     if ($config{'ENABLE_INTF_LOCAL_NETS'} eq 'Y' and not $analyze_mode) {
 
         my $connected_str = '';
-        for my $net (@$connected_subnets_cidr_ar) {
+        for my $net (@$connected_subnets_ar) {
             push @local_nets, $net;
-            $connected_str .= "$net, ";
+            $connected_str .= $net->network()->cidr() . ", ";
         }
         $connected_str =~ s|,\s*$||;
 
@@ -3087,26 +3540,20 @@ sub validate_home_net() {
         my $found_one_net = 0;
         for my $net (@home_nets) {
             my $home_net = '';
-            if ($net =~ m|($ip_re/$ip_re)|) {
-                $home_net = $1;
-            } elsif ($net =~ m|($ip_re/\d+)|) {
-                $home_net = $1;
-            } elsif ($net =~ m|($ip_re)|) {
-                $home_net = $1;
+            if ($net =~ m|($ipv4_re/$ipv4_re)|) {
+                $home_net = new NetAddr::IP $1;
+            } elsif ($net =~ m|($ipv4_re/\d+)|) {
+                $home_net = new NetAddr::IP $1;
+            } elsif ($net =~ m|($ipv4_re)|) {
+                $home_net = new NetAddr::IP $1;
             } else {
                 next;
             }
-            push @local_nets, $net;
+            push @local_nets, new NetAddr::IP $net;
             my $found = 0;
             for my $net (@$connected_subnets_ar) {
-                if (ipv4_in_network($net, $home_net)) {
-                    $found = $found_one_net = 1;
-                }
-            }
-            for my $net (@$connected_subnets_cidr_ar) {
-                if (ipv4_in_network($net, $home_net)) {
-                    $found = $found_one_net = 1;
-                }
+                $found = $found_one_net = 1
+                    if $home_net->within($net);
             }
             unless ($found) {
                 ### note that this might be ok if psad is running on a syslog
@@ -3123,13 +3570,18 @@ sub validate_home_net() {
 }
 
 sub is_local() {
-    my $ip = shift;
+    my ($ip, $ip_obj) = @_;
 
     print STDERR "[+] is_local(): $ip..." if $debug;
 
+    if ($test_mode) {
+        print STDERR "(test mode enabled) no\n";
+        return 0;
+    }
+
     my $found = 0;
     for my $net (@local_nets) {
-        if (ipv4_in_network($net, $ip)) {
+        if ($ip_obj->within($net)) {
             $found = 1;
             last;
         }
@@ -3190,20 +3642,15 @@ sub import_fw_search() {
         }
     }
     unless (defined $config{'FW_SEARCH_ALL'}) {
-        &sys_log('defaulting missing ' .
-            "FW_SEARCH_ALL variable in $config_file to Y.");
         $config{'FW_SEARCH_ALL'} = 'Y';
     }
 
     unless ($config{'FW_SEARCH_ALL'} eq 'Y' or
             $config{'FW_SEARCH_ALL'} eq 'N') {
-        &sys_log('setting FW_SEARCH_ALL to Y.');
         $config{'FW_SEARCH_ALL'} = 'Y';
     }
 
     if ($config{'FW_SEARCH_ALL'} eq 'N' and not $found_fw_search) {
-        &sys_log('defaulting missing ' .
-            "FW_MSG_SEARCH variable in $config_file to DROP.");
         push @fw_search, 'DROP';
     }
     return;
@@ -3222,7 +3669,7 @@ sub parse_ignore_ports() {
 }
 
 sub parse_port_range() {
-    my ($href, $line) = @_;
+    my ($hr, $line) = @_;
 
     my @fields = split /\s*,\s*/, $line;
     for my $field (@fields) {
@@ -3232,23 +3679,23 @@ sub parse_port_range() {
             my $high  = $3;
             if ($low < $high) {
                 my $existing_high = 0;
-                if (defined $href->{$proto}
-                        and defined $href->{$proto}->{'range'}
-                        and defined $href->{$proto}->{'range'}->{$low}) {
-                    $existing_high = $href->{$proto}->{'range'}->{$low};
+                if (defined $hr->{$proto}
+                        and defined $hr->{$proto}->{'range'}
+                        and defined $hr->{$proto}->{'range'}->{$low}) {
+                    $existing_high = $hr->{$proto}->{'range'}->{$low};
                 }
                 if ($existing_high) {
                     if ($high > $existing_high) {
-                        $href->{$proto}->{'range'}->{$low} = $high;
+                        $hr->{$proto}->{'range'}->{$low} = $high;
                     }
                 } else {
-                    $href->{$proto}->{'range'}->{$low} = $high;
+                    $hr->{$proto}->{'range'}->{$low} = $high;
                 }
             }
         } elsif ($field =~ m/(tcp|udp)\/(\d+)/i) {
             my $proto = lc($1);
             my $port  = $2;
-            $href->{$proto}->{'port'}->{$port} = '';
+            $hr->{$proto}->{'port'}->{$port} = '';
         }
     }
     return;
@@ -3471,6 +3918,7 @@ sub import_signatures() {
     ### we execute this code after receiving a HUP signal.
     %sigs = ();
     %sig_search = ();
+    %sig_ip_objs = ();
 
     ### make sure no duplicate psad_id and sid fields exist
     my %psad_ids = ();
@@ -3805,7 +4253,8 @@ sub import_signatures() {
 
                     $sig_search{$sig{'proto'}}{$src}{$dst}{$sig{'sid'}} = '';
 
-                } elsif ($sig{'proto'} eq 'tcp' or $sig{'proto'} eq 'udp') {
+                } elsif ($sig{'proto'} eq 'tcp' or $sig{'proto'} eq 'udp'
+                        or $sig{'proto'} eq 'udplite') {
 
                     my $sp_type = 'norm';
                     $sp_type = 'neg' if $sig{'sp_neg'};
@@ -3855,26 +4304,23 @@ sub check_supported_options() {
 }
 
 sub import_icmp_types() {
+    my ($proto, $type_hr, $file) = @_;
 
-    %valid_icmp_types = ();
-
-    open TYPES, "< $config{'ICMP_TYPES_FILE'}" or die
-        "[*] Could not open $config{'ICMP_TYPES_FILE'}: $!";
-    my @lines = <TYPES>;
-    close TYPES;
+    open F, "< $file" or die "[*] Could not open $file: $!";
     my $icmp_type = -1;
-    for my $line (@lines) {
-        next if $line =~ /^\s*#/;
-        if ($line =~ /^(\d+)\s+(.*)/) {
-            $icmp_type      = $1;
+    while (<F>) {
+        next if /^\s*#/;
+        if (/^(\d+)\s+(.*)/) {
+            $icmp_type = $1;
             my $icmp_type_text = $2;
             if ($icmp_type_text =~ /unassigned/i) {
                 $icmp_type = -1;
             }
-            $valid_icmp_types{$icmp_type}{'text'} = $icmp_type_text;
+            $type_hr->{$icmp_type}->{'text'} = $icmp_type_text;
+            $type_hr->{$icmp_type}->{'codes'}{-1} = '';
             next;
         }
-        if ($icmp_type > -1 and $line =~ /^\s+(\d+)\s+(.*)/) {
+        if (/^\s+(\d+)\s+(.*)/ and $icmp_type > -1) {
             my $icmp_code      = $1;
             my $icmp_code_text = $2;
             next if $icmp_code_text =~ /unassigned/i;
@@ -3882,11 +4328,12 @@ sub import_icmp_types() {
             ### we validate against the icmp type first (i.e. an invalid
             ### icmp code is meaningless unless we first have a valid
             ### icmp type).
-            $valid_icmp_types{$icmp_type}{'codes'}{$icmp_code} = '';
+            $type_hr->{$icmp_type}->{'codes'}->{$icmp_code} = '';
         }
     }
-    print STDERR Dumper %valid_icmp_types if $debug and $verbose;
-    &sys_log('imported valid icmp types and codes');
+    close F;
+    print STDERR Dumper $type_hr if $debug and $verbose;
+    &sys_log("imported valid $proto types and codes");
     return;
 }
 
@@ -3912,19 +4359,39 @@ sub expand_sig_ips() {
     if ($ip_str =~ m|,|) {
         my @ips = split /\s*,\s*/, $ip_str;
         for my $ip (@ips) {
-            if ($ip =~ m|($ip_re/$ip_re)|
-                    or $ip =~ m|($ip_re/\d+)|
-                    or $ip =~ m|($ip_re)|) {
+            if ($ip =~ m|($ipv4_re/$ipv4_re)|
+                    or $ip =~ m|($ipv4_re/\d+)|
+                    or $ip =~ m|($ipv4_re)|) {
                 push @arr, $1;
+                $sig_ip_objs{$1} = new NetAddr::IP($1);
+            } elsif ($ip =~ m|\:|) {
+                push @arr, $ip;
+                $sig_ip_objs{$ip} = new NetAddr::IP($ip)
+                    or die "[*] NetAddr::IP error for $ip";
             }
         }
-    } elsif ($ip_str =~ m|($ip_re/$ip_re)|
-            or $ip_str =~ m|($ip_re/\d+)|
-            or $ip_str =~ m|($ip_re)|) {
+
+    } elsif ($ip_str =~ m|($ipv4_re/$ipv4_re)|
+            or $ip_str =~ m|($ipv4_re/\d+)|
+            or $ip_str =~ m|($ipv4_re)|) {
         push @arr, $1;
+        $sig_ip_objs{$1} = new NetAddr::IP($1)
+            or die "[*] NetAddr::IP error for $1";
+
+    } elsif ($ip_str =~ m|\:|) {
+
+        push @arr, $ip_str;
+        $sig_ip_objs{$ip_str} = new NetAddr::IP($ip_str)
+            or die "[*] NetAddr::IP error for $ip_str";
+
     } elsif ($ip_str eq 'any' or $ip_str =~ m|NOT_?USED|i) {
         ### handle NOT_USED case from older psad versions
         push @arr, 'any';
+
+        ### this will match any IPv4 or IPv6 address
+        $sig_ip_objs{'any'}
+            = new6 NetAddr::IP('0000:0000:0000:0000:0000:0000:0000:0000/0');
+
     } else {
         die "[*] import_signatures(): Unrecognized src/dst: $ip_str ",
             "at line: $line_num";
@@ -3996,71 +4463,91 @@ sub import_auto_dl() {
 
     %auto_dl = ();  ### undef so we don't leave old ips in %auto_dl
 
-    open A, "< $config{'AUTO_DL_FILE'}" or die '[*] Could not open ',
-        "$config{'AUTO_DL_FILE'}: $!";
-    my @lines = <A>;
-    close A;
     my $i = 0;
-    LINE: for my $line (@lines) {
+    open F, "< $config{'AUTO_DL_FILE'}" or die '[*] Could not open ',
+        "$config{'AUTO_DL_FILE'}: $!";
+    while (<F>) {
         $i++;
-        next LINE unless $line =~ /\S/;
-        next LINE if $line =~ /^\s*#/;
+        next unless /\S/;
+        next if /^\s*#/;
         my $ip   = '';
         my $mask = '';
         my $dl   = '';
         my $opt_criteria = '';
-        if ($line =~ m|^\s*($ip_re)\s*/\s*($ip_re)\s+([0-5])\s*(.*);|) {
+        if (m|^\s*($ipv4_re)\s*/\s*($ipv4_re)\s+([0-5])\s*(.*);|) {
             $ip   = $1;
             $mask = $2;
             $dl   = $3;
             $opt_criteria = $4;
-        } elsif ($line =~ m|^\s*($ip_re)\s*/\s*(\d+)\s+([0-5])\s*(.*);|) {
+        } elsif (m|^\s*($ipv4_re)\s*/\s*(\d+)\s+([0-5])\s*(.*);|) {
             $ip   = $1;
             $mask = $2;
             $dl   = $3;
             $opt_criteria = $4;
-        } elsif ($line =~ m|^\s*($ip_re)\s+([0-5])\s*(.*);|) {
+        } elsif (m|^\s*($ipv4_re)\s+([0-5])\s*(.*);|) {
             $ip   = $1;
             $mask = '32';  ### single IP
             $dl   = $2;
             $opt_criteria = $3;
-        } elsif ($line =~ m|^\s*(\S+)\s+([0-5])\s*(.*);|) {
-            ### check to see if it is a hostname
-            my $hostname = $1;
-            $dl          = $2;
+        } elsif (m|^\s*(\S+)\s+([0-5])\s*(.*);|) {
+            my $str = $1;
+            $dl           = $2;
             $opt_criteria = $3;
-            my $iaddr = 0;
-            $iaddr = inet_aton($hostname);
-            unless ($iaddr) {
-                &sys_log(qq|could not resolve auto_dl "$hostname" | .
-                    "to an IP at line $i");
-                next LINE;
+            if ($str =~ /\:/) {
+                ### check to see if this is an IPv6 address
+                if ($str =~ m|(\S+)/(\S+)|) {
+                    $ip   = $1;
+                    $mask = $2;
+                } else {
+                    $ip   = $str;
+                    $mask = '128';
+                }
+            } else {
+                ### check to see if it is a hostname
+                my $hostname  = $str;
+                my $iaddr = 0;
+                $iaddr = inet_aton($hostname);
+                unless ($iaddr) {
+                    &sys_log(qq|could not resolve auto_dl "$hostname" | .
+                        "to an IP at line $i");
+                    next;
+                }
+                $ip = inet_ntoa($iaddr) or
+                    &sys_log(qq|could not resolve auto_dl "$hostname" | .
+                        "to an IP at line $i");
+                $mask = '32';  ### single IP
             }
-            $ip = inet_ntoa($iaddr) or
-                &sys_log(qq|could not resolve auto_dl "$hostname" | .
-                    "to an IP at line $i");
-            $mask = '32';  ### single IP
         } else {
             &sys_log("improperly formatted auto_dl line $i");
-            next LINE;
+            next;
+        }
+
+        $auto_dl_ip_objs{$ip} = new NetAddr::IP($ip, $mask);
+        unless (defined $auto_dl_ip_objs{$ip} and $auto_dl_ip_objs{$ip}) {
+            &sys_log("auto_dl could not acquire NetAddr::IP object at line $i");
+            next;
         }
 
         $auto_dl{$ip}{'mask'} = $mask;
         $auto_dl{$ip}{'dl'}   = $dl;
 
-        if ($line =~ m|icmp|i) {
+        if (m|icmp|i) {
             $auto_dl{$ip}{'proto'}{'icmp'}{'all'} = '';
         }
 
         ### check for optional port/protocol criteria
-        if ($line =~ /tcp/i or $line =~ /udp/i) {
+        if (/tcp/i or /udp/i) {
             &parse_port_range(\%{$auto_dl{$ip}{'proto'}}, $opt_criteria);
         }
 
-        if ($line =~ m|tcp|i and not defined $auto_dl{$ip}{'proto'}{'tcp'}) {
+        if (m|tcp|i and not defined $auto_dl{$ip}{'proto'}{'tcp'}) {
             $auto_dl{$ip}{'proto'}{'tcp'}{'all'} = '';
         }
-        if ($line =~ m|udp|i and not defined $auto_dl{$ip}{'proto'}{'udp'}) {
+        if (m|udplite|i and
+                not defined $auto_dl{$ip}{'proto'}{'udplite'}) {
+            $auto_dl{$ip}{'proto'}{'udplite'}{'all'} = '';
+        }
+        if (m|udp|i and not defined $auto_dl{$ip}{'proto'}{'udp'}) {
             $auto_dl{$ip}{'proto'}{'udp'}{'all'} = '';
         }
 
@@ -4073,30 +4560,25 @@ sub import_auto_dl() {
             }
         }
     }
+    close F;
+
     if (%auto_dl) {
-        my $ip_ctr = 0;
-        my $net_ctr = 0;
-        for my $ip (keys %auto_dl) {
-            my $mask = $auto_dl{$ip}{'mask'};
-            if ($mask eq '32') {
-                $ip_ctr++;
-            } else {
-                $net_ctr++;
-            }
-        }
+
         ### don't write syslog message if we are running in --fw-block-ip
         ### mode
         unless ($fw_block_ip) {
-            &sys_log("imported auto_dl, got $ip_ctr " .
-                "IP addresses and $net_ctr networks");
+            my $msg = "imported auto_dl file, got " . (keys %auto_dl) .
+                " IP addrs/networks";
+            print STDERR $msg, "\n" if $debug;
+            &sys_log($msg);
         }
     }
     return;
 }
 
-sub import_p0f_sigs() {
+sub import_p0f_ipv4_sigs() {
 
-    %p0f_sigs = ();
+    %p0f_ipv4_sigs = ();
 
     my $p0f_file = $config{'P0F_FILE'};
     open P, "< $p0f_file" or die '[*] Could not open ',
@@ -4124,13 +4606,13 @@ sub import_p0f_sigs() {
             my $sig_str = "$win_size:$ttl:$frag_bit:$len:$options";
             ### don't know how to handle MTU-based window size yet
             unless ($win_size =~ /T/) {
-                $p0f_sigs{$len}{$frag_bit}{$ttl}{$win_size}{$options}{$os}
+                $p0f_ipv4_sigs{$len}{$frag_bit}{$ttl}{$win_size}{$options}{$os}
                     = $sig_str;
             }
         }
     }
 
-    print STDERR Dumper %p0f_sigs if $debug and $verbose;
+    print STDERR Dumper %p0f_ipv4_sigs if $debug and $verbose;
     &sys_log('imported p0f-based passive OS fingerprinting signatures');
     return;
 }
@@ -4261,7 +4743,7 @@ sub assign_danger_level() {
             }
 
             ### calculate the range over _both_ tcp and udp
-            for my $proto qw(tcp udp) {
+            for my $proto (qw(tcp udp)) {
                 next unless defined $scan{$src}{$dst}{$proto};
                 next unless defined $scan{$src}{$dst}{$proto}{'abs_sp'};
                 if ($s_port > $scan{$src}{$dst}{$proto}{'abs_sp'}) {
@@ -4331,7 +4813,7 @@ sub assign_auto_danger_level() {
         my $mask = $auto_dl{$net}{'mask'};  ### may be a /32 (single IP)
 
         ### check to see if $pkt_hr->{'src'} is contained within an auto_dl network
-        next NET unless ipv4_in_network("$net/$mask", $pkt_hr->{'src'});
+        next NET unless $pkt_hr->{'s_obj'}->within($auto_dl_ip_objs{$net});
 
         ### $pkt_hr->{'src'} is part of an ignored network
         return 0 if $dl == 0;
@@ -4369,26 +4851,10 @@ sub assign_auto_danger_level() {
     return -1;
 }
 
-sub net_overlap() {
-    my ($net, $mask, $block_ip, $block_mask) = @_;
-
-    my ($block_net_addr, $block_net_mask) =
-        ipv4_network($block_ip, $block_mask);
-    my $block_net_br = ipv4_broadcast("$block_net_addr/$block_net_mask");
-
-    if (ipv4_in_network("$net/$mask", $block_net_addr)) {
-        return 1;
-    }
-    if (ipv4_in_network("$net/$mask", $block_net_br)) {
-        return 1;
-    }
-    return 0;
-}
-
 sub check_scan_proto() {
-    my ($proto, $scan_href) = @_;
-    for my $dst (keys %$scan_href) {
-        return 1 if defined $scan_href->{$dst}->{$proto};
+    my ($proto, $scan_hr) = @_;
+    for my $dst (keys %$scan_hr) {
+        return 1 if defined $scan_hr->{$dst}->{$proto};
     }
     return 0;
 }
@@ -4396,9 +4862,10 @@ sub check_scan_proto() {
 sub write_global_packet_counters() {
     open P, "> $config{'PACKET_COUNTER_FILE'}" or
         die "[*] Could not open $config{'PACKET_COUNTER_FILE'}: $!";
-    print P "tcp:  $tcp_ctr\n",
-        "udp:  $udp_ctr\n",
-        "icmp: $icmp_ctr\n";
+    for my $proto (@protocols) {
+        next unless defined $proto_ctrs{$proto};
+        printf P "%8s: %d\n", $proto, $proto_ctrs{$proto};
+    }
     close P;
     return;
 }
@@ -4429,12 +4896,12 @@ sub write_src_packet_counters() {
         die "[*] Could not open $file: $!";
     for my $chain (keys %$hr) {
         for my $intf (keys %{$hr->{$chain}}) {
-            for my $proto qw(tcp udp icmp) {
+            for my $proto (@protocols) {
                 next unless defined $hr->{$chain}->{$intf}->{$proto};
                 if ($proto eq 'tcp' and $tcp_absrange) {
                     print P "${chain}_${intf}_${proto}:  ",
                         "$hr->{$chain}->{$intf}->{$proto} [$tcp_absrange]\n";
-                } elsif ($proto eq 'udp' and $udp_absrange) {
+                } elsif (($proto eq 'udp' or $proto eq 'udplite') and $udp_absrange) {
                     print P "${chain}_${intf}_${proto}:  ",
                         "$hr->{$chain}->{$intf}->{$proto} [$udp_absrange]\n";
                 } else {
@@ -4449,10 +4916,10 @@ sub write_src_packet_counters() {
 }
 
 sub collect_errors() {
-    my $bad_packets_aref = shift;
+    my $bad_packets_ar = shift;
     open ERR, ">> $config{'FW_ERROR_LOG'}" or die '[*] Could not open ',
         "$config{'FW_ERROR_LOG'}: $!";
-    for my $line (@$bad_packets_aref) {
+    for my $line (@$bad_packets_ar) {
         print ERR $line;
     }
     close ERR;
@@ -4638,7 +5105,7 @@ sub scan_logr() {
             my $tcp_f  = 0;
             my $udp_f  = 0;
             my $icmp_f = 0;
-            my $whois_info_aref;
+            my $whois_info_ar;
 
             ### get the current danger level and the absolute number
             ### of packets used in the scan so far
@@ -4667,7 +5134,7 @@ sub scan_logr() {
 
             ### make $src directory here in /var/log/psad
             ### unless it already exists
-            mkdir "$config{'PSAD_DIR'}/${src}", 0500
+            mkdir "$config{'PSAD_DIR'}/${src}", 0700
                 unless -d "$config{'PSAD_DIR'}/${src}";
             my $src_dir = "$config{'PSAD_DIR'}/${src}";
             my $dl_file      = "${src_dir}/danger_level";
@@ -4811,16 +5278,17 @@ sub scan_logr() {
                 ### we're most likely interested in the whois information for
                 ### a non local IP address
                 if ($config{'ENABLE_WHOIS_FORCE_SRC_IP'} eq 'N'
-                        and &is_local($src) and not &is_local($dst)) {
+                        and &is_local($src, new NetAddr::IP($src))
+                        and not &is_local($dst, new NetAddr::IP($dst))) {
                     $whois_which_ip_str = 'destination IP';
                     $lookup_ip = $dst;
                 }
 
-                $whois_info_aref = &get_whois_info($lookup_ip,
+                $whois_info_ar = &get_whois_info($lookup_ip,
                                     "${src_dir}/${lookup_ip}_whois");
 
                 if ($debug and $verbose) {
-                    print STDERR for $whois_info_aref;
+                    print STDERR for @$whois_info_ar;
                 }
             }
             print STDERR "[+] scan_logr(): generating email.....\n"
@@ -4828,15 +5296,11 @@ sub scan_logr() {
 
             ### get the absolute starting time for the scan and the
             ### current time
-            my $abs_s_time = '';
-            if ($analyze_mode) {
-                $abs_s_time = $scan{$src}{$dst}{'s_time'};
-            } else {
-                $abs_s_time = scalar localtime $scan{$src}{$dst}{'s_time'};
-            }
             my $s_time = '';
-            if (not $analyze_mode and time() - $config{'CHECK_INTERVAL'} <
-                    $scan{$src}{$dst}{'s_time'}) {
+            my $abs_s_time = scalar localtime $scan{$src}{$dst}{'s_time'};
+
+            if (not $analyze_mode and ((time() - $config{'CHECK_INTERVAL'}) <
+                    $scan{$src}{$dst}{'s_time'})) {
                 $s_time = $abs_s_time;
             } else {
                 $s_time = scalar localtime((time()
@@ -5042,7 +5506,7 @@ sub scan_logr() {
 
             unless ($no_whois) {
                 print $fh "\n[+] Whois Information ($whois_which_ip_str):\n";
-                for my $line (@$whois_info_aref) {
+                for my $line (@$whois_info_ar) {
                     print $fh $line;
                 }
             }
@@ -5103,29 +5567,29 @@ sub scan_logr_signatures() {
     my @log_sigs = ();
     my $found_sid = 0;
 
-    for my $proto qw(tcp udp icmp ip) {
+    for my $proto (@protocols) {
         next unless defined $scan{$src}{$dst}{$proto};
-        my $href = $scan{$src}{$dst}{$proto};
+        my $hr = $scan{$src}{$dst}{$proto};
 
-        next unless (defined $href->{'sid'}
-                or defined $href->{'invalid_type'}
-                or defined $href->{'invalid_code'});
+        next unless (defined $hr->{'sid'}
+                or defined $hr->{'invalid_type'}
+                or defined $hr->{'invalid_code'});
 
         print $email_fh "\n\n[+] " . uc($proto) . " scan signatures:\n\n";
         print STDERR "[+] scan_logr_signatures(): src: $src dst: $dst ",
             "proto: $proto\n" if $debug;
 
         my $sid_ctr = 0;
-        for my $sid (keys %{$href->{'sid'}}) {
+        for my $sid (keys %{$hr->{'sid'}}) {
             $sid_ctr++;
             if ($sid_ctr <= $config{'SIG_SID_SYSLOG_THRESHOLD'}) {
                 $found_sid = 1;
             }
-            for my $chain (keys %{$href->{'sid'}->{$sid}}) {
+            for my $chain (keys %{$hr->{'sid'}->{$sid}}) {
 
                 my $sig_hr      = '';
                 my $email_chain = $chain;
-                my $is_fwsnort  = $href->{'sid'}->{$sid}
+                my $is_fwsnort  = $hr->{'sid'}->{$sid}
                     ->{$chain}->{'is_fwsnort'};
 
                 if ($is_fwsnort) {
@@ -5138,17 +5602,18 @@ sub scan_logr_signatures() {
 
                 my $dp    = 0;
                 my $flags = 'NA';
-                if ($proto eq 'tcp' or $proto eq 'udp') {
-                    $dp = $href->{'sid'}->{$sid}->{$chain}->{'dp'};
+                if ($proto eq 'tcp' or $proto eq 'udp'
+                        or $proto eq 'udplite') {
+                    $dp = $hr->{'sid'}->{$sid}->{$chain}->{'dp'};
                     if ($proto eq 'tcp') {
-                        $flags = $href->{'sid'}->{$sid}->{$chain}->{'flags'};
+                        $flags = $hr->{'sid'}->{$sid}->{$chain}->{'flags'};
                     }
                 }
 
-                my $pkts = $href->{'sid'}->{$sid}->{$chain}->{'pkts'};
+                my $pkts = $hr->{'sid'}->{$sid}->{$chain}->{'pkts'};
 
                 ### string for the <ip>_signatures file
-                push @log_sigs, "$href->{'sid'}->{$sid}->{$chain}->{'time'} " .
+                push @log_sigs, "$hr->{'sid'}->{$sid}->{$chain}->{'time'} " .
                     qq|$sid $pkts "$sig_hr->{'msg'}" $chain $proto $dp "$flags" | .
                     "$is_fwsnort $sig_hr->{'is_psad_id'}";
 
@@ -5157,14 +5622,15 @@ sub scan_logr_signatures() {
                     my $sig_log_str = "src: $src signature match: " .
                         qq|"$sig_hr->{'msg'}" (sid: $sid) $proto|;
 
-                    if ($proto eq 'tcp' or $proto eq 'udp') {
+                    if ($proto eq 'tcp' or $proto eq 'udp'
+                            or $proto eq 'udplite') {
                         $sig_log_str .= " port: $dp";
                     }
 
                     if ($is_fwsnort) {
                         $sig_log_str .= ' fwsnort';
 
-                        if (defined $href->{'sid'}->{$sid}->{$chain}
+                        if (defined $hr->{'sid'}->{$sid}->{$chain}
                                 ->{'fwsnort_estab'}) {
 
                             if ($chain eq 'INPUT') {
@@ -5178,7 +5644,7 @@ sub scan_logr_signatures() {
                                 $email_chain = 'FWSNORT_OUTPUT';
                             }
 
-                            if ($href->{'sid'}->{$sid}
+                            if ($hr->{'sid'}->{$sid}
                                     ->{$chain}->{'fwsnort_estab'}) {
 
                                 $sig_log_str .= '_ESTAB';
@@ -5186,12 +5652,12 @@ sub scan_logr_signatures() {
                             }
                         }
 
-                        if (defined $href->{'sid'}->{$sid}->{$chain}
-                                ->{'fwsnort_rnum'} and $href->{'sid'}->{$sid}
+                        if (defined $hr->{'sid'}->{$sid}->{$chain}
+                                ->{'fwsnort_rnum'} and $hr->{'sid'}->{$sid}
                                 ->{$chain}->{'fwsnort_rnum'}) {
 
                             $sig_log_str .= ' rule: ' .
-                                $href->{'sid'}->{$sid}->{$chain}
+                                $hr->{'sid'}->{$sid}->{$chain}
                                 ->{'fwsnort_rnum'};
                         }
                     }
@@ -5202,7 +5668,8 @@ sub scan_logr_signatures() {
 
                 print $email_fh qq|   "$sig_hr->{'msg'}"\n|;
 
-                if ($proto eq 'tcp' or $proto eq 'udp') {
+                if ($proto eq 'tcp' or $proto eq 'udp'
+                        or $proto eq 'udplite') {
                     if ($chain eq 'INPUT') {
                         if (defined $local_ports{$proto}
                                 and defined $local_ports{$proto}{$dp}) {
@@ -5265,21 +5732,21 @@ sub scan_logr_signatures() {
                 print $email_fh "\n";
             }
         }
-        if (defined $href->{'invalid_type'}) {
-            for my $type (keys %{$href->{'invalid_type'}}) {
-                for my $chain (keys %{$href->{'invalid_type'}->{$type}}) {
-                    my $pkts = $href->{'invalid_type'}->
+        if (defined $hr->{'invalid_type'}) {
+            for my $type (keys %{$hr->{'invalid_type'}}) {
+                for my $chain (keys %{$hr->{'invalid_type'}->{$type}}) {
+                    my $pkts = $hr->{'invalid_type'}->
                     {$type}->{$chain}->{'pkts'};
                     print $email_fh
                         qq|   Invalid ICMP type "$type" chain=$chain packets=$pkts\n|;
                 }
             }
         }
-        if (defined $href->{'invalid_code'}) {
-            for my $type (keys %{$href->{'invalid_code'}}) {
-                for my $code (keys %{$href->{'invalid_code'}->{$type}}) {
-                    for my $chain (keys %{$href->{'invalid_code'}->{$type}->{$code}}) {
-                        my $pkts = $href->{'invalid_code'}->
+        if (defined $hr->{'invalid_code'}) {
+            for my $type (keys %{$hr->{'invalid_code'}}) {
+                for my $code (keys %{$hr->{'invalid_code'}->{$type}}) {
+                    for my $chain (keys %{$hr->{'invalid_code'}->{$type}->{$code}}) {
+                        my $pkts = $hr->{'invalid_code'}->
                         {$type}->{$code}->{$chain}->{'pkts'};
                         print $email_fh qq|   Invalid ICMP code "$code" for ICMP |,
                               qq|"$valid_icmp_types{$type}{'text'}" packet\n|,
@@ -5288,7 +5755,7 @@ sub scan_logr_signatures() {
                 }
             }
         }
-        push @del_sigs, $href;
+        push @del_sigs, $hr;
     }
 
     if (@log_sigs) {
@@ -5303,15 +5770,15 @@ sub scan_logr_signatures() {
         move "$log_sigs_file.tmp", $log_sigs_file;
     }
     unless ($config{'SHOW_ALL_SIGNATURES'} eq 'Y') {
-        for my $href (@del_sigs) {
+        for my $hr (@del_sigs) {
             ### need to delete the current signature so it
             ### won't show up in the next alert
-            delete $href->{'sid'}
-                if defined $href->{'sid'};
-            delete $href->{'invalid_type'}
-                if defined $href->{'invalid_type'};
-            delete $href->{'invalid_code'}
-                if defined $href->{'invalid_code'};
+            delete $hr->{'sid'}
+                if defined $hr->{'sid'};
+            delete $hr->{'invalid_type'}
+                if defined $hr->{'invalid_type'};
+            delete $hr->{'invalid_code'}
+                if defined $hr->{'invalid_code'};
         }
     }
     close LS;
@@ -5394,7 +5861,7 @@ sub renew_auto_blocked_ips() {
         close B;
 
         for my $line (@lines) {
-            if ($line =~ /^\s*($ip_re)\s+(\d+)/) {
+            if ($line =~ /^\s*($ipv4_re)\s+(\d+)/) {
                 my $ip = $1;
                 my $orig_block_time = $2;
 
@@ -5432,7 +5899,7 @@ sub renew_auto_blocked_ips() {
         my @lines = <B>;
         close B;
         for my $line (@lines) {
-            if ($line =~ /^\s*($ip_re)\s+(\d+)/) {
+            if ($line =~ /^\s*($ipv4_re)\s+(\d+)/) {
                 my $ip = $1;
                 my $orig_block_time = $2;
 
@@ -5541,28 +6008,28 @@ sub flush_auto_blocked_ips() {
             my $from_chain = $hr->{'from_chain'};
             my $to_chain   = $hr->{'to_chain'};
 
-            my ($rv, $out_aref, $err_aref)
+            my ($rv, $out_ar, $err_ar)
                 = $ipt->chain_exists($table, $to_chain);
 
             if ($rv) {
                 if ($fw_del_chains) {
-                    ($rv, $out_aref, $err_aref) = $ipt->delete_chain($table,
+                    ($rv, $out_ar, $err_ar) = $ipt->delete_chain($table,
                         $from_chain, $to_chain);
                     if ($rv) {
                         &sys_log("deleted $table table $to_chain chain");
                     } else {
                         &sys_log("could not delete $table " .
                             "table $to_chain chain");
-                        &sys_log_mline($err_aref);
+                        &sys_log_mline($err_ar);
                     }
                 } else {
-                    ($rv, $out_aref, $err_aref)
+                    ($rv, $out_ar, $err_ar)
                         = $ipt->flush_chain($table, $to_chain);
                     if ($rv) {
                         &sys_log("flushed: $to_chain");
                     } else {
                         &sys_log("could not flush: $to_chain");
-                        &sys_log_mline($err_aref);
+                        &sys_log_mline($err_ar);
                     }
                 }
             }
@@ -5586,7 +6053,7 @@ sub flush_auto_blocked_ips() {
         my @lines = <B>;
         close B;
         for my $line (@lines) {
-            if ($line =~ /($ip_re)/) {
+            if ($line =~ /($ipv4_re)/) {
                 my $ip = $1;
                 ### remove block rules for $ip if it has been blocked
                 &tcpwr_rm_block($ip) if &tcpwr_test_block($ip);
@@ -5638,7 +6105,7 @@ sub check_auto_response_sock() {
 sub ipt_block() {
     my ($ip, $renewed_status) = @_;
 
-    return unless $ip and $ip =~ /^$ip_re$/;
+    return unless $ip and $ip =~ /^$ipv4_re$/;
 
     ### see if the IP is already blocked
     if (defined $auto_blocked_ips{$ip}) {
@@ -5670,9 +6137,9 @@ sub ipt_block() {
     }
 
     if ($config{'IPTABLES_PREREQ_CHECK'} > 1) {
-        $netfilter_prereq_check++;
-        $netfilter_prereq_check = 1
-            if $netfilter_prereq_check == $config{'IPTABLES_PREREQ_CHECK'};
+        $iptables_prereq_check++;
+        $iptables_prereq_check = 1
+            if $iptables_prereq_check == $config{'IPTABLES_PREREQ_CHECK'};
     }
 
     ### add block rule for $ip unless it is already blocked
@@ -5689,30 +6156,30 @@ sub ipt_block() {
         my $dst = '';
 
         if ($config{'IPTABLES_PREREQ_CHECK'} == 1
-                or $netfilter_prereq_check == 1) {
+                or $iptables_prereq_check == 1) {
             print STDERR "[+] iptables chains and jump rule check.\n"
                 if $debug;
 
             ### make sure "to_chain" exists
-            my ($rv, $out_aref, $err_aref)
+            my ($rv, $out_ar, $err_ar)
                 = $ipt->create_chain($table, $to_chain);
 
             unless ($rv) {
                 my $msg = "could not create $table $to_chain chain";
                 &sys_log($msg);
-                &sys_log_mline($err_aref);
+                &sys_log_mline($err_ar);
                 print STDERR "[-] ipt_block(): $msg\n" if $debug;
                 next;
             }
 
             ### add jump rule to the "to_chain" from the "from_chain"
-            ($rv, $out_aref, $err_aref) = $ipt->add_jump_rule($table,
+            ($rv, $out_ar, $err_ar) = $ipt->add_jump_rule($table,
                 $from_chain, $jump_rule_position, $to_chain);
 
             unless ($rv) {
                 my $msg = "could not add jump rule to $to_chain chain";
                 &sys_log($msg);
-                &sys_log_mline($err_aref);
+                &sys_log_mline($err_ar);
                 print STDERR "[-] ipt_block(): $msg\n" if $debug;
                 next;
             }
@@ -5734,7 +6201,7 @@ sub ipt_block() {
                 "already exists.\n" if $debug;
             $already_blocked = 1;
         } else {
-            my ($rv, $out_aref, $err_aref) = $ipt->add_ip_rule($src, $dst,
+            my ($rv, $out_ar, $err_ar) = $ipt->add_ip_rule($src, $dst,
                 $auto_rule_position, $table, $to_chain, $target);
             if ($rv) {
                 print STDERR "[+] Test1 block success.\n" if $debug;
@@ -5742,7 +6209,7 @@ sub ipt_block() {
             } else {
                 my $msg = "could not add block rule for $src -> $dst";
                 &sys_log($msg);
-                &sys_log_mline($err_aref);
+                &sys_log_mline($err_ar);
                 print STDERR "[-] ipt_block(): $msg\n" if $debug;
             }
         }
@@ -5759,7 +6226,7 @@ sub ipt_block() {
                     "already exists.\n" if $debug;
                 $already_blocked = 1;
             } else {
-                my ($rv, $out_aref, $err_aref) = $ipt->add_ip_rule($src2, $dst2,
+                my ($rv, $out_ar, $err_ar) = $ipt->add_ip_rule($src2, $dst2,
                     $auto_rule_position, $table, $to_chain, $target);
                 if ($rv) {
                     print STDERR "[+] Test2 block success.\n" if $debug;
@@ -5767,7 +6234,7 @@ sub ipt_block() {
                 } else {
                     my $msg = "could not add block rule for $src2 -> $dst2";
                     &sys_log($msg);
-                    &sys_log_mline($err_aref);
+                    &sys_log_mline($err_ar);
                     print STDERR "[-] ipt_block(): $msg\n" if $debug;
                 }
             }
@@ -5857,14 +6324,14 @@ sub ipt_rm_block() {
             $dst = $ip;
         }
 
-        my ($rv, $out_aref, $err_aref) = $ipt->delete_ip_rule($src, $dst,
+        my ($rv, $out_ar, $err_ar) = $ipt->delete_ip_rule($src, $dst,
             $table, $to_chain, $target);
         if ($rv) {
             $rm_block = 1;
         } else {
             my $msg = "could not delete rule for $src -> $dst";
             &sys_log($msg);
-            &sys_log_mline($err_aref);
+            &sys_log_mline($err_ar);
             print STDERR "[-] ipt_rm_block(): $msg\n" if $debug;
         }
 
@@ -5872,14 +6339,14 @@ sub ipt_rm_block() {
             ### need to delete reverse rule for FORWARD chain
             my $src2 = $dst;
             my $dst2 = $src;
-            ($rv, $out_aref, $err_aref) = $ipt->delete_ip_rule($src2, $dst2,
+            ($rv, $out_ar, $err_ar) = $ipt->delete_ip_rule($src2, $dst2,
                 $table, $to_chain, $target);
             if ($rv) {
                 $rm_block = 1;
             } else {
                 my $msg = "could not delete rule for $src -> $dst";
                 &sys_log($msg);
-                &sys_log_mline($err_aref);
+                &sys_log_mline($err_ar);
                 print STDERR "[-] ipt_rm_block(): $msg\n" if $debug;
             }
         }
@@ -5941,15 +6408,15 @@ sub ipt_list_auto_chains() {
         my $table    = $hr->{'table'};
         my $to_chain = $hr->{'to_chain'};
 
-        my ($rv, $out_aref, $err_aref)
+        my ($rv, $out_ar, $err_ar)
             = $ipt->chain_exists($table, $to_chain);
 
         if ($rv) {
-            ($rv, $out_aref, $err_aref) =
+            ($rv, $out_ar, $err_ar) =
                 $ipt->run_ipt_cmd("$cmds{'iptables'} -t " .
                     "$table -n -L $to_chain -v");
-            if ($rv and $out_aref) {
-                print for @$out_aref;
+            if ($rv and $out_ar) {
+                print for @$out_ar;
             }
             print "\n";
         } else {
@@ -5960,10 +6427,10 @@ sub ipt_list_auto_chains() {
 }
 
 sub check_ipt_cmd() {
-    my $lines_aref = shift;
+    my $lines_ar = shift;
 
     my %uniq_cmds = ();
-    for my $line (@$lines_aref) {
+    for my $line (@$lines_ar) {
         chomp $line;
         next if defined $uniq_cmds{$line};
         $uniq_cmds{$line} = '';
@@ -5972,14 +6439,14 @@ sub check_ipt_cmd() {
             $del_chains = 1 if $line =~ /delchains/i;
             &flush_auto_blocked_ips($del_chains);
         } else {
-            if ($line =~ m|add\s+($ip_re)\s*$|i
-                    or $line =~ m|add\s+($ip_re/\d+)\s*$|i
-                    or $line =~ m|add\s+($ip_re/$ip_re)\s*$|i) {
+            if ($line =~ m|add\s+($ipv4_re)\s*$|i
+                    or $line =~ m|add\s+($ipv4_re/\d+)\s*$|i
+                    or $line =~ m|add\s+($ipv4_re/$ipv4_re)\s*$|i) {
                 ### instantiate the blocking rule
                 &ipt_block($1, '');
-            } elsif ($line =~ m|del\s+($ip_re)\s*$|i
-                    or $line =~ m|del\s+($ip_re/\d+)\s*$|i
-                    or $line =~ m|del\s+($ip_re/$ip_re)\s*$|i) {
+            } elsif ($line =~ m|del\s+($ipv4_re)\s*$|i
+                    or $line =~ m|del\s+($ipv4_re/\d+)\s*$|i
+                    or $line =~ m|del\s+($ipv4_re/$ipv4_re)\s*$|i) {
                 ### remove the blocking rule
                 &ipt_rm_block($1);
             }
@@ -5993,32 +6460,33 @@ sub check_ipt_cmd() {
 sub sockwrite_add_ipt_block_ip() {
 
     die "[*] --fw-block-ip takes either an IP or subnet as an argument."
-        unless $fw_block_ip =~ /$ip_re/;
+        unless $fw_block_ip =~ /$ipv4_re/;
 
     my $block_ip   = '';
     my $block_mask = '';
-    if ($fw_block_ip =~ m|^\s*($ip_re)\s*$|) {
+    my $block_net  = '';
+
+    if ($fw_block_ip =~ m|^\s*($ipv4_re)\s*$|) {
         $block_ip   = $1;
         $block_mask = '32';
-    } elsif ($fw_block_ip =~ m|^\s*($ip_re)/($ip_re)\s*$|) {
+        $block_net = new NetAddr::IP($1);
+    } elsif ($fw_block_ip =~ m|^\s*($ipv4_re)/($ipv4_re)\s*$|) {
         $block_ip   = $1;
         $block_mask = $2;
-    } elsif ($fw_block_ip =~ m|^\s*($ip_re)/(\d+)\s*$|) {
+        $block_net = new NetAddr::IP($1, $2);
+    } elsif ($fw_block_ip =~ m|^\s*($ipv4_re)/(\d+)\s*$|) {
         $block_ip   = $1;
         $block_mask = $2;
+        $block_net = new NetAddr::IP($1, $2);
     } else {
         die "[*] Badly formatted block IP: $fw_block_ip";
     }
 
-    if ($block_mask ne '32') {
+    if ($block_net->masklen() != 32) {
         ### a subnet was given on the command line, so make
         ### sure we were also given a network address (iptables
         ### converts to the network address in -nL output)
-        my ($tmpnetaddr, $tmpnetmask) =
-            ipv4_network($block_ip, $block_mask);
-        $block_ip = $tmpnetaddr if $block_ip ne $tmpnetaddr;
-        $block_mask = $tmpnetmask if $block_mask ne $tmpnetmask;
-        $fw_block_ip = "$block_ip/$block_mask";
+        $fw_block_ip = $block_net->network()->cidr();
     }
 
     ### import auto_dl file
@@ -6031,7 +6499,7 @@ sub sockwrite_add_ipt_block_ip() {
 
         next NET unless $dl == 0;  ### only care about the ignored IPs/nets
 
-        if (&net_overlap($net, $mask, $block_ip, $block_mask)) {
+        if ($block_net->within($auto_dl_ip_objs{$net})) {
             die "[*] $fw_block_ip overlaps with whitelisted ",
                 "$net/$mask in $config{'AUTO_DL_FILE'}";
         }
@@ -6063,32 +6531,33 @@ sub sockwrite_add_ipt_block_ip() {
 sub sockwrite_rm_ipt_block_ip() {
 
     die "[*] --fw-rm-block-ip takes an IP/subnet as an argument."
-        unless $fw_rm_block_ip =~ /$ip_re/;
+        unless $fw_rm_block_ip =~ /$ipv4_re/;
 
     my $rm_block_ip   = '';
     my $rm_block_mask = '';
-    if ($fw_rm_block_ip =~ m|^\s*($ip_re)\s*$|) {
+    my $rm_block_net  = '';
+
+    if ($fw_rm_block_ip =~ m|^\s*($ipv4_re)\s*$|) {
         $rm_block_ip   = $1;
         $rm_block_mask = '32';
-    } elsif ($fw_rm_block_ip =~ m|^\s*($ip_re)/($ip_re)\s*$|) {
+        $rm_block_net = new NetAddr::IP($1);
+    } elsif ($fw_rm_block_ip =~ m|^\s*($ipv4_re)/($ipv4_re)\s*$|) {
         $rm_block_ip   = $1;
         $rm_block_mask = $2;
-    } elsif ($fw_rm_block_ip =~ m|^\s*($ip_re)/(\d+)\s*$|) {
+        $rm_block_net = new NetAddr::IP($1, $2);
+    } elsif ($fw_rm_block_ip =~ m|^\s*($ipv4_re)/(\d+)\s*$|) {
         $rm_block_ip   = $1;
         $rm_block_mask = $2;
+        $rm_block_net = new NetAddr::IP($1, $2);
     } else {
         die "[*] Badly formatted rm block IP: $fw_rm_block_ip";
     }
 
-    if ($rm_block_mask ne '32') {
+    if ($rm_block_net->masklen() != '32') {
         ### a subnet was given on the command line, so make
         ### sure we were also given a network address (iptables
         ### converts to the network address in -nL output)
-        my ($tmpnetaddr, $tmpnetmask) =
-            ipv4_network($rm_block_ip, $rm_block_mask);
-        $rm_block_ip = $tmpnetaddr if $rm_block_ip ne $tmpnetaddr;
-        $rm_block_mask = $tmpnetmask if $rm_block_mask ne $tmpnetmask;
-        $fw_rm_block_ip = "$rm_block_ip/$rm_block_mask";
+        $fw_rm_block_ip = $rm_block_net->network()->cidr();
     }
 
     if (-e $config{'PSAD_PID_FILE'}) {
@@ -6359,7 +6828,7 @@ sub build_ipt_config() {
                     if $debug;
                 next VAR;
             }
-            my ($rv, $out_aref, $err_aref)
+            my ($rv, $out_ar, $err_ar)
                 = $ipt->chain_exists($hsh{'table'}, $hsh{'from_chain'});
 
             if ($rv) {
@@ -6398,7 +6867,7 @@ sub diskwrite_blocked_ip() {
         ### file (or update the time if $renewed_status)
         for my $line (@tmplines) {
             chomp $line;
-            if ($line =~ /^\s*($ip_re)\s*$/) {  ### old format; update to include time
+            if ($line =~ /^\s*($ipv4_re)\s*$/) {  ### old format; update to include time
                 my $tmpsrc = $1;
                 push @lines, "$tmpsrc " . $auto_blocked_ips{$tmpsrc};
                 $skip_src = 1 if $tmpsrc eq $src;
@@ -6452,7 +6921,7 @@ sub diskwrite_rm_blocked_ip() {
         die "[*] Could not open ${file}.tmp: $!";
     for my $line (@lines) {
         chomp $line;
-        if ($line =~ /^\s*($ip_re)/) {
+        if ($line =~ /^\s*($ipv4_re)/) {
             print W $line, "\n" unless $src eq $1;
         }
     }
@@ -6500,7 +6969,10 @@ sub get_local_ips() {
         my @ips = @{&run_command($cmds{'ip'}, 'addr')};
         return unless @ips;
         for my $line (@ips) {
-            if ($line =~ /inet\s+($ip_re)\/\d+\s/) {
+            if ($line =~ /inet\s+($ipv4_re)\/\d+\s/) {
+                print STDERR "[+] : Adding $1 to local_ips\n" if $debug;
+                $local_ips{$1} = '';
+            } elsif ($line =~ /inet6\s(\S+)/) {
                 print STDERR "[+] : Adding $1 to local_ips\n" if $debug;
                 $local_ips{$1} = '';
             }
@@ -6510,7 +6982,10 @@ sub get_local_ips() {
         my @ips = @{&run_command($cmds{'ifconfig'}, '-a')};
         return unless @ips;
         for my $line (@ips) {
-            if ($line =~ /inet\s+.*?:($ip_re)\s/) {
+            if ($line =~ /inet\s+.*?:($ipv4_re)\s/) {
+                print STDERR "[+] : Adding $1 to local_ips\n" if $debug;
+                $local_ips{$1} = '';
+            } elsif ($line =~ /inet6\s+addr:\s+(\S+)/) {
                 print STDERR "[+] : Adding $1 to local_ips\n" if $debug;
                 $local_ips{$1} = '';
             }
@@ -6612,7 +7087,7 @@ sub stop_psad() {
     &sys_log('shutting down psad daemons');
     ### must kill psadwatchd first since if not, it might try to restart
     ### any of the other two daemons.
-    for my $pidname qw(psadwatchd kmsgsd psad) {
+    for my $pidname (qw(psadwatchd kmsgsd psad)) {
         my $pidfile = $pidfiles{$pidname};
         if (-e $pidfile) {
             my $pid = &is_running($pidfile);
@@ -6712,23 +7187,36 @@ sub analysis_mode() {
     ### work more easily).
     $config{'PSAD_DIR'} = $config{'ANALYSIS_MODE_DIR'};
 
+    ### build @local_nets array
+    my $connected_subnets_ar = &get_connected_subnets();
+    for my $net (@$connected_subnets_ar) {
+        push @local_nets, $net;
+    }
+
     print "[+] Entering analysis mode.  Parsing $fw_data_file\n";
     open MSGS, "< $fw_data_file" or die "[*] Could not open ",
         "$fw_data_file: $!";
     my @lines = <MSGS>;
     close MSGS;
-    my @ipt_msgs;
-    for my $line (@lines) {
+    my @ipt_msgs = ();
+    my $pkt_ctr = 0;
+    PKT: for my $line (@lines) {
+        if ($num_packets > 0) {
+            last PKT if $pkt_ctr >= $num_packets;
+        }
         if ($line =~ /IN.*OUT/) {
             if ($config{'FW_SEARCH_ALL'} eq 'Y') {
                 push @ipt_msgs, $line;
+                $pkt_ctr++;
             } else {
                 if ($line =~ /$config{'SNORT_SID_STR'}/) {
                     push @ipt_msgs, $line;
+                    $pkt_ctr++;
                 } else {
                     for my $fw_search_str (@fw_search) {
                         if ($line =~ /$fw_search_str/) {
                             push @ipt_msgs, $line;
+                            $pkt_ctr++;
                         }
                     }
                 }
@@ -6743,6 +7231,7 @@ sub analysis_mode() {
     &check_scan(\@ipt_msgs);
 
     print "\n[+] Finished --Analyze cycle.\n";
+
     return 0;
 }
 
@@ -6788,23 +7277,22 @@ sub ipt_match_criteria() {
                 } else {
                     return [], '' unless $pkt_hr->{$tok} =~ m|$match_hr->{'re'}|;
                 }
-            } elsif (defined $match_hr->{'net'}) {
-                if ($pkt_hr->{$tok} =~ m|$ip_re|) {
+            } elsif (defined $match_hr->{'net'} or defined $match_hr->{'ip'}) {
+                if ($pkt_hr->{$tok} =~ m|$ipv4_re|
+                        or $pkt_hr->{$tok} =~ m|$ipv6_re|) {
+                    my $ip_match_obj = '';
+                    if ($tok eq 'src') {
+                        $ip_match_obj = $pkt_hr->{'s_obj'};
+                    } elsif ($tok eq 'dst') {
+                        $ip_match_obj = $pkt_hr->{'s_obj'};
+                    }
                     if ($match_hr->{'negate'}) {
-                        return [], '' if ipv4_in_network($match_hr->{'net'},
-                                $pkt_hr->{$tok});
+                        return [], '' if $ip_match_obj->within($match_hr->{'net'});
                     } else {
-                        return [], '' unless ipv4_in_network($match_hr->{'net'},
-                                $pkt_hr->{$tok});
+                        return [], '' unless $ip_match_obj->within($match_hr->{'net'});
                     }
                 } else {
                     return [], '';
-                }
-            } elsif (defined $match_hr->{'ip'}) {
-                if ($match_hr->{'negate'}) {
-                    return [], '' if $pkt_hr->{$tok} eq $match_hr->{'ip'};
-                } else {
-                    return [], '' unless $pkt_hr->{$tok} eq $match_hr->{'ip'};
                 }
             }
         }
@@ -6959,7 +7447,7 @@ sub csv_mode() {
 sub gnuplot_header() {
     my @lines = ();
     push @lines, '#', '#'x$num_hash_marks, '#',
-        "# Generated by psad v$version (file revision: $rev_num)",
+        "# Generated by psad v$version",
         "# Command line: 'psad @args_cp'",
         "# Time stamp:  " . localtime(),
         '#', '#'x$num_hash_marks, '#', '';
@@ -7633,9 +8121,9 @@ sub csv_tokens() {
                 $search =~ s/^not//;
             }
 
-            for my $count_type qw/countabs countuniq
+            for my $count_type (qw/countabs countuniq
                     countday counthouruniq countminuniq countdayuniq
-                    counthour countmin countday count/ {
+                    counthour countmin countday count/) {
 
                 if ($search =~ /,$count_type$/ or $search =~ /^$count_type/) {
 
@@ -7705,11 +8193,11 @@ sub csv_tokens() {
                     $search_hsh{'re'} = qr|$1|;
                 } elsif ($search =~ m|^'(.*?)'$|) {
                     $search_hsh{'str'} = $1;
-                } elsif ($search =~ m|^$ip_re/$ip_re$|) {
+                } elsif ($search =~ m|^$ipv4_re/$ipv4_re$|) {
                     $search_hsh{'net'} = $search;
-                } elsif ($search =~ m|^$ip_re/\d+$|) {
+                } elsif ($search =~ m|^$ipv4_re/\d+$|) {
                     $search_hsh{'net'} = $search;
-                } elsif ($search =~ m|^$ip_re$|) {
+                } elsif ($search =~ m|^$ipv4_re$|) {
                     $search_hsh{'ip'} = $search;
                 } else {
                     die "[*] Unrecognized value for $token";
@@ -7720,7 +8208,7 @@ sub csv_tokens() {
             }
         }
     } else {
-        @tokens = qw(
+        @tokens = (qw(
             timestamp
             src
             dst
@@ -7732,7 +8220,7 @@ sub csv_tokens() {
             intf
             chain
             log_prefix
-        );
+        ));
     }
 
     return \@tokens, \@match_criteria;
@@ -7744,34 +8232,60 @@ sub benchmark_mode() {
 
     print scalar localtime(), " [+] Entering benchmark mode.\n";
 
-    if ($b_packets) {
+    if ($num_packets) {
         print scalar localtime(),
-            " [+] Executing a $b_packets packet test.\n";
+            " [+] Executing a $num_packets packet test.\n";
     } else {
-        print scalar localtime(), ' [+] The --packets command line ',
-            "option was not specified.\n";
-        print scalar localtime(),
-            " [+] Defaulting to a 10,000 packet test.\n";
-        $b_packets = 10000;
+        if ($fw_data_file) {
+            print scalar localtime(), ' [+] The --packets command line ',
+                "option was not specified.\n";
+            print scalar localtime(),
+                " [+] Defaulting to read the entire $fw_data_file file.\n";
+        } else {
+            print scalar localtime(), ' [+] The --packets command line ',
+                "option was not specified.\n";
+            print scalar localtime(),
+                " [+] Defaulting to a 10,000 packet test.\n";
+            $num_packets = 10000;
+        }
     }
 
     ### initialize benchmarking test packets if we are running
     ### in benchmark mode
-    ### FIXME better random packet data tests, add IP and TCP options, etc.
-    my $test_pkt = 'Feb 15 16:42:58 orthanc kernel: DROP IN=eth0 ' .
-        'OUT= MAC=00:a0:cc:28:42:5a:00:03:6c:00:98:54:08:00 ' .
-        'SRC=192.168.10.2 DST=192.168.10.1 LEN=48 TOS=0x00 PREC=0x00 ' .
-        'TTL=110 ID=13383 DF PROTO=TCP SPT=1389 ';
-    my $test_pktend = 'WINDOW=16384 RES=0x00 SYN URGP=0';
+    if ($fw_data_file) {
+        if ($num_packets) {
+            print scalar localtime(), " [+] Creating $num_packets packet ",
+                "array from $fw_data_file\n";
+        } else {
+            print scalar localtime(), " [+] Creating packet ",
+                "array from complete $fw_data_file\n";
+        }
+        my $ctr = 0;
+        open F, "< $fw_data_file" or die "[*] Could not open $fw_data_file: $!";
+        while (<F>) {
+            chomp;
+            push @fw_packets, $_;
+            $ctr++;
+            last if $num_packets > 0 and $ctr >= $num_packets;
+        }
+        close F;
+    } else {
+        ### FIXME better random packet data tests, add IP and TCP options, etc.
+        my $test_pkt = 'Feb 15 16:42:58 orthanc kernel: DROP IN=eth0 ' .
+            'OUT= MAC=00:a0:cc:28:42:5a:00:03:6c:00:98:54:08:00 ' .
+            'SRC=192.168.10.2 DST=192.168.10.1 LEN=48 TOS=0x00 PREC=0x00 ' .
+            'TTL=110 ID=13383 DF PROTO=TCP SPT=1389 ';
+        my $test_pktend = 'WINDOW=16384 RES=0x00 SYN URGP=0';
 
-    my $b_time = time();
-    print scalar localtime(), " [+] Creating packet array.\n";
-    my $dp = 1000;
-    for (my $i=0; $i <= $b_packets; $i++) {
-        push @fw_packets, "$test_pkt DPT=$dp $test_pktend";
-        $dp++ if $dp < 50000;
+        print scalar localtime(), " [+] Creating packet array.\n";
+        my $dp = 1000;
+        for (my $i=0; $i <= $num_packets; $i++) {
+            push @fw_packets, "$test_pkt DPT=$dp $test_pktend";
+            $dp++ if $dp < 50000;
+        }
     }
 
+    my $b_time = time();
     print scalar localtime(), " [+] check_scan()\n" if $benchmark;
     &check_scan(\@fw_packets);
 
@@ -7802,6 +8316,8 @@ sub fw_analyze_mode() {
         $opts .= " --fw-analyze" if $fw_analyze;
         $opts .= " --fw-file $fw_file" if $fw_file;
         $opts .= " -L $lib_dir" if $lib_dir;
+        $opts .= " --test-mode" if $test_mode;
+        $opts .= " -O $override_config_str" if $override_config_str;
         $opts .= " --no-fw-search-all" if $config{'FW_SEARCH_ALL'} eq 'N';
         $exit_status = (system "$cmds{'fwcheck_psad'} $opts") >> 8;
     }
@@ -7812,7 +8328,7 @@ sub fw_analyze_mode() {
 sub status() {
 
     my $rv = 0;   ### assume psad is not running and test...
-    for my $pidname qw(psadwatchd kmsgsd psad) {
+    for my $pidname (qw(psadwatchd kmsgsd psad)) {
         my $pidfile = $pidfiles{$pidname};
         if (-e $pidfile) {
             my $pid = &is_running($pidfile);
@@ -7876,9 +8392,8 @@ sub status_psad_daemon() {
         "$config{'EMAIL_ADDRESSES'}\n\n";
 
     ### build @local_nets array
-    my ($connected_subnets_ar, $connected_subnets_cidr_ar)
-        = &get_connected_subnets();
-    for my $net (@$connected_subnets_cidr_ar) {
+    my $connected_subnets_ar = &get_connected_subnets();
+    for my $net (@$connected_subnets_ar) {
         push @local_nets, $net;
     }
 
@@ -7959,7 +8474,7 @@ sub print_scan_status() {
     my %uniq_dsts = ();
 
     my $printed = 0;
-    for my $dl qw/5 4 3 2 1/ {
+    for my $dl (qw/5 4 3 2 1/) {
         SRC: for my $src (sort keys %scan) {
             next SRC unless $scan_dl{$src} == $dl;
             my $dl = $scan_dl{$src};
@@ -7975,7 +8490,7 @@ sub print_scan_status() {
                 next unless defined $scan{$src}{$dst}{'absnum'};
                 $tot_pkts += $scan{$src}{$dst}{'absnum'};
             }
-            for my $proto qw/tcp udp icmp ip/ {
+            for my $proto (@protocols) {
                 for my $dst (keys %{$scan{$src}}) {
                     next unless defined $scan{$src}{$dst}{$proto}
                         and defined $scan{$src}{$dst}{$proto}{'sid'};
@@ -7989,6 +8504,13 @@ sub print_scan_status() {
             my $src_str = "\nSRC:  $src, DL: $dl, Dsts: $total_dsts" .
                 ", Pkts: $tot_pkts, Unique sigs: $uniq_sigs";
 
+            my $src_obj = new NetAddr::IP($src) or die "[*] NetAddr::IP($src) error";
+            if ($src_obj->version() == 6) {
+                $src_str = "\nSRC:  $src (" . $src_obj->short() .
+                    "), DL: $dl, Dsts: $total_dsts" .
+                    ", Pkts: $tot_pkts, Unique sigs: $uniq_sigs";
+            }
+
             unless ($analyze_mode) {
                 my $tot_alerts = 0;
                 if ($config{'ENABLE_EMAIL_LIMIT_PER_DST'} eq 'Y') {
@@ -8000,7 +8522,7 @@ sub print_scan_status() {
                 }
                 $src_str .= ", Email alerts: $tot_alerts";
             }
-            if (&is_local($src)) {
+            if (&is_local($src, $src_obj)) {
                 $src_str .= ', Local IP';
             }
             $printed = 1;
@@ -8019,7 +8541,12 @@ sub print_scan_status() {
 
             DST: for my $dst (keys %{$scan{$src}}) {
                 my $dst_str = "    DST: $dst";
-                if (&is_local($dst)) {
+                my $dst_obj = new NetAddr::IP($dst)
+                    or die "[*] NetAddr::IP($dst) error";
+                if ($dst_obj->version() == 6) {
+                    $dst_str = "    DST: $dst (" . $dst_obj->short() . ')';
+                }
+                if (&is_local($dst, $dst_obj)) {
                     $dst_str .= ', Local IP';
                 }
                 push @lines, "$dst_str\n";
@@ -8031,7 +8558,8 @@ sub print_scan_status() {
                                     {$chain}}) {
                             for my $proto (keys %{$scan{$src}{$dst}{'chain'}
                                         {$chain}{$intf}}) {
-                                next unless $proto eq 'tcp' or $proto eq 'udp';
+                                next unless $proto eq 'tcp' or $proto eq 'udp'
+                                    or $proto eq 'udplite';
                                 my $start_port = $scan{$src}{$dst}
                                         {$proto}{'abs_sp'};
                                 my $end_port   = $scan{$src}{$dst}
@@ -8053,7 +8581,7 @@ sub print_scan_status() {
                 }
 
                 ### signature matches
-                for my $proto qw/tcp udp icmp ip/ {
+                for my $proto (@protocols) {
                     next unless defined $scan{$src}{$dst}{$proto}
                         and defined $scan{$src}{$dst}{$proto}{'sid'};
 
@@ -8077,7 +8605,8 @@ sub print_scan_status() {
                                 "            " . uc($proto) .
                                 ", Chain: $chain, Count: $matches";
 
-                            if ($proto eq 'tcp' or $proto eq 'udp') {
+                            if ($proto eq 'tcp' or $proto eq 'udp'
+                                    or $proto eq 'udplite') {
                                 my $dp = $scan{$src}{$dst}{$proto}
                                     {'sid'}{$sid}{$chain}{'dp'};
                                 $sig_str .= ", DP: $dp";
@@ -8089,6 +8618,42 @@ sub print_scan_status() {
                             }
                             $sig_str .= ", Sid: $sid";
                             push @lines, $sig_str, "\n";
+                        }
+                    }
+                }
+
+                ### icmp validation
+                for my $proto ('icmp', 'icmp6') {
+                    next unless defined $scan{$src}{$dst}{$proto};
+                    if (defined $scan{$src}{$dst}{$proto}{'invalid_type'}) {
+                        my $hr = $scan{$src}{$dst}{$proto}{'invalid_type'};
+                        for my $type (keys %$hr) {
+                            for my $chain (keys %{$hr->{$type}}) {
+                                my $pkts = $hr->{$type}->{$chain}->{'pkts'};
+                                push @lines, qq|        Invalid | . uc($proto) .
+                                    qq| type: "$type" Chain: $chain, Packets: | .
+                                    "$pkts\n";
+                            }
+                        }
+                    }
+                    if (defined $scan{$src}{$dst}{$proto}{'invalid_code'}) {
+                        my $hr = $scan{$src}{$dst}{$proto}{'invalid_code'};
+                        for my $type (keys %$hr) {
+                            for my $code (keys %{$hr->{$type}}) {
+                                for my $chain (keys %{$hr->{$type}->{$code}}) {
+                                    my $pkts = $hr->{$type}->{$code}->{$chain}->{'pkts'};
+                                    my $type_text = '';
+                                    if ($proto eq 'icmp') {
+                                        $type_text = $valid_icmp_types{$type}{'text'};
+                                    } else {
+                                        $type_text = $valid_icmp6_types{$type}{'text'};
+                                    }
+                                    push @lines, qq|        Invalid | . uc($proto) .
+                                        qq| code: "$code" for | . uc($proto) .
+                                        qq| "$type_text" packet | .
+                                        qq|Chain: $chain, Packets: $pkts\n|;
+                                }
+                            }
                         }
                     }
                 }
@@ -8159,7 +8724,7 @@ sub print_blocked_ip_status() {
         chomp $line;
         if ($line =~ /^\s*(\S+)/) {
             my $ip = $1;  ### this may be a subnet
-            next unless $ip =~ /$ip_re/;
+            next unless $ip =~ /$ipv4_re/;
             if ($specific_ip) {
                 next unless $ip eq $specific_ip;
             }
@@ -8230,12 +8795,8 @@ sub import_packet_counters() {
     open F, "< $config{'PACKET_COUNTER_FILE'}" or
         die "[*] $config{'PACKET_COUNTER_FILE'}: $!";
     while (<F>) {
-        if (/tcp:\s+(\d+)/) {
-            $tcp_ctr = $1;
-        } elsif (/udp:\s+(\d+)/) {
-            $udp_ctr = $1;
-        } elsif (/icmp:\s+(\d+)/) {
-            $icmp_ctr = $1;
+        if (/(\w+):\s+(\d+)/) {
+            $proto_ctrs{$1} = $2;
         }
     }
     close F;
@@ -8243,8 +8804,14 @@ sub import_packet_counters() {
 }
 
 sub print_packet_counters() {
-    return ["    Total packet counters: tcp: $tcp_ctr, udp: " .
-        "$udp_ctr, icmp: $icmp_ctr\n\n"];
+    my $str = "    Total packet counters: ";
+    for my $proto (@protocols) {
+        next unless defined $proto_ctrs{$proto};
+        $str .= "$proto: $proto_ctrs{$proto} ";
+    }
+    $str .= "\n\n";
+
+    return [$str];
 }
 
 sub import_dshield_stats() {
@@ -8315,10 +8882,12 @@ sub import_ip_dirs() {
     closedir D;
 
     my $import_ctr = 0;
+
+    my $curr_pwd = getcwd();
     chdir $config{'PSAD_DIR'} or die $!;
 
     SRCIP: for my $src (@files) {
-        next SRCIP unless ($src =~ /$ip_re/ and -d $src);
+        next SRCIP unless ($src =~ /$ipv4_re/ and -d $src);
         ### define as many hash keys as we can (older versions
         ### of psad don't include several of these files).
         my $num_emails = 0;
@@ -8354,7 +8923,8 @@ sub import_ip_dirs() {
         ### get all of the destination ip addresses
         my %dst_ips;
         for my $scan_file (@scan_files) {
-            if ($scan_file =~ /($ip_re)/) {
+            next if $scan_file =~ /_whois/;  ### may be <src>_whois
+            if ($scan_file =~ /($ipv4_re)/) {
                 $dst_ips{$1} = '';
             }
         }
@@ -8479,6 +9049,8 @@ sub import_ip_dirs() {
         }
         $import_ctr++;
     }
+    chdir $curr_pwd or die $!;
+
     return;
 }
 
@@ -8569,6 +9141,8 @@ sub import_top_scanned_ports() {
                 $top_tcp_ports{$port} = $count;
             } elsif ($proto eq 'udp') {
                 $top_udp_ports{$port} = $count;
+            } elsif ($proto eq 'udplite') {
+                $top_udplite_ports{$port} = $count;
             }
         }
     }
@@ -8630,7 +9204,7 @@ sub import_top_attackers() {
         next unless /\S/;
         next if /^\s*#\s*$/;
         ###  Format: <IP> <DL> <total_packets> <uniq_sigs> <sig_matches> <is_local>
-        if (/^\s*($ip_re)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d)/) {
+        if (/^\s*($ipv4_re)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d)/) {
             my $ip = $1;
             my $dl = $2;
             my $tot_pkts = $3;
@@ -8665,8 +9239,11 @@ sub print_top_attackers() {
     } else {
         push @lines, "[+] Top attackers:\n";
     }
+
     my $ctr = 0;
     my %pre_sort_dl = ();
+    my %ip_objs = ();
+
     for my $src (sort {$scan_dl{$b} cmp $scan_dl{$a}} keys %scan_dl) {
         if ($status_min_dl) {
             next unless $scan_dl{$src} >= $status_min_dl;
@@ -8676,13 +9253,37 @@ sub print_top_attackers() {
         $pre_sort_dl{$scan_dl{$src}}{$src} = '';
     }
 
-    for my $dl qw/5 4 3 2 1/ {
+    my $ip6_short_len = 0;
+    for my $dl (qw/5 4 3 2 1/) {
+        next unless defined $pre_sort_dl{$dl};
+
+        for my $src (sort keys %{$pre_sort_dl{$dl}}) {
+            next unless defined $top_packet_counts{$src}
+                    or defined $top_sig_counts{$src};
+
+            my $ip_obj = new NetAddr::IP($src)
+                or die "[*] NetAddr::IP $src error";
+
+            $ip_objs{$src} = $ip_obj;
+            if ($ip_obj->version() == 6) {
+                if (length($ip_obj->short()) > $ip6_short_len) {
+                    $ip6_short_len = length($ip_obj->short());
+                }
+            }
+        }
+    }
+
+    for my $dl (qw/5 4 3 2 1/) {
         next unless defined $pre_sort_dl{$dl};
 
         for my $src (sort keys %{$pre_sort_dl{$dl}}) {
             next unless defined $top_packet_counts{$src}
                     or defined $top_sig_counts{$src};
             my $str = sprintf "      %-15s DL: %d", $src, $scan_dl{$src};
+            if ($ip_objs{$src}->version() == 6) {
+                $str = sprintf "      %s (%-${ip6_short_len}s) DL: %d", $src,
+                    $ip_objs{$src}->short(), $scan_dl{$src};
+            }
             if (defined $top_packet_counts{$src}) {
                 $str .= ", Packets: $top_packet_counts{$src}";
             } else {
@@ -8717,12 +9318,14 @@ sub remove_old_scans() {
     my @files = readdir D;
     closedir D;
 
+    my $curr_pwd = getcwd();
     chdir $config{'PSAD_DIR'} or die $!;
     SRCIP: for my $src (@files) {
-        next SRCIP unless ($src =~ /$ip_re/ and -d $src);
+        next SRCIP unless ($src =~ /$ipv4_re/ and -d $src);
         rmtree $src or die
             "[*] Could not remove $config{'PSAD_DIR'}/$src: $!";
     }
+    chdir $curr_pwd or die $!;
     return;
 }
 
@@ -8770,7 +9373,7 @@ sub usr1_handler() {
 
 sub hup() {
     my $rv = 0;
-    for my $pidname qw(psadwatchd psad kmsgsd) {
+    for my $pidname (qw(psadwatchd psad kmsgsd)) {
         my $pidfile = $pidfiles{$pidname};
         my $pid = &is_running($pidfile);
         if ($pid) {
@@ -8812,10 +9415,12 @@ sub warn_handler() {
 }
 
 sub archive_data() {
+
+    my $curr_pwd = getcwd();
     chdir $config{'PSAD_DIR'} or die "[*] Could not chdir ",
         "$config{'PSAD_DIR'}: $!";
     unless (-d $config{'SCAN_DATA_ARCHIVE_DIR'}) {
-        mkdir $config{'SCAN_DATA_ARCHIVE_DIR'}, 0500 or
+        mkdir $config{'SCAN_DATA_ARCHIVE_DIR'}, 0700 or
             die "[*] Could not create dir: ",
             "$config{'SCAN_DATA_ARCHIVE_DIR'}: $!";
     }
@@ -8829,7 +9434,7 @@ sub archive_data() {
     closedir D;
 
     IPDIR: for my $file (@files) {
-        if ($file =~ /$ip_re/ and -d $file) {
+        if ($file =~ /$ipv4_re/ and -d $file) {
             ### check for the danger level associated with this dir
             if (-e "$file/danger_level") {
                 open F, "< $file/danger_level" or next IPDIR;
@@ -8861,6 +9466,7 @@ sub archive_data() {
         &truncate_file($fwarchive) unless $config{'ENABLE_SYSLOG_FILE'} eq 'Y';
     }
     unless (-e $fwdata) {
+        chdir $curr_pwd or die $!;
         return;
     }
     open FW, "< $fwdata" or die "$fwdata exists but couldn't open it: $!";
@@ -8869,6 +9475,8 @@ sub archive_data() {
     open AR, ">> $fwarchive" or die "Could not open $fwarchive: $!";
     print AR $_ for @fwlines;
     close AR;
+
+    chdir $curr_pwd or die $!;
     return;
 }
 
@@ -8909,31 +9517,32 @@ sub handle_cmdline() {
     ### file was specified on the command line.
     $fw_analyze = 1 if $fw_file;
 
-    ### disable whois lookups if we are running in -A mode.
+    ### disable whois and DNS lookups if we are running in -A mode.
     $no_whois = 1 if $analyze_mode and not $analysis_whois;
+    $no_rdns = 1 if $analyze_mode and not $enable_analysis_dns;
 
     return;
 }
 
 sub make_psad_dirs() {
-    for my $dir qw(
+    for my $dir (qw(
         /var/lib
         /var/run
-    ) {
+    )) {
         next if -d $dir;
         mkdir $dir, 0755 or die "[*] Could not mkdir $dir: $!";
     }
 
-    for my $dir qw(
+    for my $dir (qw(
         PSAD_DIR
         PSAD_RUN_DIR
         PSAD_FIFO_DIR
         PSAD_CONF_DIR
         CONF_ARCHIVE_DIR
         PSAD_ERR_DIR
-    ) {
+    )) {
         next if -d $config{$dir};
-        mkdir $config{$dir}, 0500 or
+        mkdir $config{$dir}, 0700 or
             die "[*] Could not mkdir $config{$dir}: $!";
     }
     return;
@@ -9228,6 +9837,8 @@ sub truncate_file() {
 }
 
 sub disk_space_exceeded() {
+
+    my $curr_pwd = getcwd();
     my @df_data = @{&run_command($cmds{'df'}, $config{'PSAD_DIR'})};
     my ($prcnt) = ($df_data[$#df_data] =~ /(\d+)%/);
     my $rv = 0;
@@ -9249,7 +9860,7 @@ sub disk_space_exceeded() {
             ### of our worries).
             &sys_log("removing $config{'SCAN_DATA_ARCHIVE_DIR'} directory");
             rmtree $config{'SCAN_DATA_ARCHIVE_DIR'};
-            mkdir $config{'SCAN_DATA_ARCHIVE_DIR'}, 0500;
+            mkdir $config{'SCAN_DATA_ARCHIVE_DIR'}, 0700;
         }
         opendir D, $config{'PSAD_DIR'} or
             die "[*] Could not open dir: $config{'PSAD_DIR'}: $!";
@@ -9258,7 +9869,7 @@ sub disk_space_exceeded() {
 
         chdir $config{'PSAD_DIR'} or die $!;
         for my $ipdir (@ipdirs) {
-            if ($ipdir =~ /$ip_re/ and -d $ipdir) {
+            if ($ipdir =~ /$ipv4_re/ and -d $ipdir) {
                 opendir IP, $ipdir or die $!;
                 my @scanfiles = readdir IP;
                 closedir IP;
@@ -9282,7 +9893,7 @@ sub disk_space_exceeded() {
                 "on $config{'HOSTNAME'}!",
                 '', $config{'EMAIL_ADDRESSES'},
                 $cmds{'mail'});
-            for my $pidname qw(psadwatchd kmsgsd) {
+            for my $pidname (qw(psadwatchd kmsgsd)) {
                 my $pidfile = $pidfiles{$pidname};
                 my $pid = &is_running($pidfile);
                 if ($pid) {
@@ -9297,6 +9908,7 @@ sub disk_space_exceeded() {
         ### the disk check interval was exceeded but the utilization is ok.
         $rm_data_ctr = 0;
     }
+    chdir $curr_pwd or die $!;
     return $rv;
 }
 
@@ -9346,7 +9958,7 @@ sub dump_conf() {
         my @ifconfig_out = @{&run_command($cmds{'ip'}, 'addr')};
         if (@ifconfig_out) {
             for (@ifconfig_out) {
-                s/$ip_re/x.x.x.x/g;
+                s/$ipv4_re/x.x.x.x/g;
                 s/inet6\s+\S+/inet6 (removed)/;
                 print $fh $_;
             }
@@ -9356,7 +9968,7 @@ sub dump_conf() {
         my @ifconfig_out = @{&run_command($cmds{'ifconfig'}, '-a')};
         if (@ifconfig_out) {
             for (@ifconfig_out) {
-                s/$ip_re/x.x.x.x/g;
+                s/$ipv4_re/x.x.x.x/g;
                 s/inet6\s+addr:\s+\S+/inet6 addr: (removed)/;
                 print $fh $_;
             }
@@ -9364,7 +9976,7 @@ sub dump_conf() {
     }
     print $fh "\n";
 
-    print $fh "\n[+] psad v$version (file revision: $rev_num)\n\n";
+    print $fh "\n[+] psad v$version\n\n";
     my $install_log = '/var/log/psad/install.log';
     if (-e $install_log) {
         print $fh "[+] $install_log exists.\n\n";
@@ -9395,8 +10007,34 @@ sub dump_conf() {
 
 sub dump_ipt_policy() {
     my $rv = 0;
+
     my $fh = *STDOUT;
     $fh = *STDERR if $debug;
+
+    if ($config{'ENABLE_IPV6_DETECTION'} eq 'Y') {
+        print $fh "\n[+] ip6tables policy dump:\n";
+        if (defined $cmds{'ip6tables'} and -x $cmds{'ip6tables'}) {
+            my @ipt_ver = @{&run_command($cmds{'ip6tables'}, '-V')};
+            if (@ipt_ver) {
+                print $fh $_ for @ipt_ver;
+                print "\n";
+            }
+            my @lines = @{&run_command($cmds{'ip6tables'}, '-v -n -L')};
+            for my $line (@lines) {
+                unless ($fw_include_ips) {
+                    ### always include ::/0
+                    $line =~ s|\s\:\:/0\s|___PsAd0Net___|g;
+                    $line =~ s|\s([A-Fa-f0-9\:]{2,40}/\d{1,3})\s| ::/x |g;
+                    $line =~ s|___PsAd0Net___| ::/0 |g;
+                }
+                print $fh $line;
+            }
+        } else {
+            print $fh "[*] Could not find ip6tables command.\n";
+            $rv = 1;
+        }
+    }
+
     print $fh "\n[+] iptables policy dump:\n";
     if (defined $cmds{'iptables'} and -x $cmds{'iptables'}) {
         my @ipt_ver = @{&run_command($cmds{'iptables'}, '-V')};
@@ -9410,8 +10048,8 @@ sub dump_ipt_policy() {
                 ### always include 0.0.0.0/0
                 $line =~ s|0\.0\.0\.0/0|___PsAd0Net___|g;
                 $line =~ s|0\.0\.0\.0|___PsAd0IP___|g;
-                $line =~ s|($ip_re/\d+)|x.x.x.x/x|g;
-                $line =~ s|($ip_re)|x.x.x.x|g;
+                $line =~ s|($ipv4_re/\d+)|x.x.x.x/x|g;
+                $line =~ s|($ipv4_re)|x.x.x.x|g;
                 $line =~ s|___PsAd0Net___|0.0.0.0/0|g;
                 $line =~ s|___PsAd0IP___|0.0.0.0|g;
             }
@@ -9421,6 +10059,7 @@ sub dump_ipt_policy() {
         print $fh "[*] Could not find iptables command.\n";
         $rv = 1;
     }
+
     return $rv;
 }
 
@@ -9435,6 +10074,8 @@ sub sys_log_mline() {
 ### write a message to syslog
 sub sys_log() {
     my $msg = shift;
+
+    return unless $imported_syslog_module;
     return if $no_syslog_alerts;
 
     ### this is an ugly hack to avoid the 'can't use string as subroutine'
@@ -9497,6 +10138,7 @@ sub download_signatures() {
     ### for wget
     &check_commands({'sendmail'=>'', 'mail'=>''});
 
+    my $curr_pwd = getcwd();
     chdir '/tmp' or die $!;
 
     print "[+] Downloading latest signatures from:\n",
@@ -9517,13 +10159,42 @@ sub download_signatures() {
 "    place. You can restart psad (or use 'psad -H') to import the\n",
 "    new sigs.\n";
 
+    chdir $curr_pwd or die $!;
+
     return 0;
+}
+
+sub date_time() {
+    my $date_str = shift;
+
+    my $time = time();
+
+    my $date = $time;
+
+    ### Feb 27 12:36:57
+    if ($date_str =~ /^\s*(\w+)\s+(\d+)\s+(\d{2}):(\d{2}):(\d{2})/) {
+        my $m_tmp = $1;  ### kludge for Decode_Month() call
+        my $month = Decode_Month($m_tmp);
+        my $day   = sprintf("%.2d", $2);
+        my $hour  = $3;
+        my $min   = $4;
+        my $sec   = $5;
+
+        $date = Date_to_Time(This_Year(), $month, $day, $hour, $min, $sec);
+
+        if ($date > $time) {
+            ### date is in the future because the iptables syslog message
+            ### does not include the year - subtract one year
+            $date -= 60*60*24*356;
+        }
+    }
+
+    return $date;
 }
 
 sub archive_conf() {
     my $file = shift;
 
-    require Cwd;
     my $curr_pwd = getcwd();
     chdir $config{'CONF_ARCHIVE_DIR'} or die $!;
     my ($filename) = ($file =~ m|.*/(.*)|);
@@ -9576,7 +10247,7 @@ sub import_config() {
                 ### found a command
                 $cmds{$1} = $val unless defined $cmds{$1};
             } else {
-                $config{$varname} = $val unless defined $config{$varname};;
+                $config{$varname} = $val unless defined $config{$varname};
             }
         }
     }
@@ -9602,7 +10273,12 @@ sub expand_vars() {
                     die "[*] sub-ver $sub_var not allowed within same ",
                         "variable $var" if $sub_var eq $var;
                     if (defined $config{$sub_var}) {
-                        $val =~ s|\$$sub_var|$config{$sub_var}|;
+                        if ($sub_var eq 'INSTALL_ROOT'
+                                and $config{$sub_var} eq '/') {
+                            $val =~ s|\$$sub_var||;
+                        } else {
+                            $val =~ s|\$$sub_var|$config{$sub_var}|;
+                        }
                         $hr->{$var} = $val;
                     } else {
                         die "[*] sub-var \"$sub_var\" not defined in ",
@@ -9616,12 +10292,32 @@ sub expand_vars() {
     return;
 }
 
+sub is_root() {
+
+    ### exceptions
+    for my $var ($download_sigs,
+            $analyze_mode,
+            $get_next_rule_id,
+            $gnuplot_mode,
+            $csv_mode,
+            $dump_conf,
+            $status_mode,
+            $benchmark,
+    ) {
+        return if $var;
+    }
+
+    $< == 0 and $> == 0 or
+        die '[*] psad: You must be root (or equivalent ',
+            "UID 0 account) to execute psad!  Exiting.";
+}
+
 ### check to make sure all required varables are defined in the config
 ### this subroutine is passed different variables by each script that
 ### correspond to only those variables needed be each script).
 sub defined_vars() {
-    my $varnames_aref = shift;
-    for my $var (@$varnames_aref) {
+    my $varnames_ar = shift;
+    for my $var (@$varnames_ar) {
         unless (defined $config{$var}) {  ### missing var
             die "[*] The config file \"$config_file\" does not " .
                   "contain the\nvariable: \"$var\".  Exiting!";
@@ -9645,16 +10341,18 @@ sub check_commands() {
         }
     }
 
-    my @path = qw(
+    my @path = (qw(
         /bin
         /sbin
         /usr/bin
         /usr/sbin
         /usr/local/bin
         /usr/local/sbin
-    );
+    ));
+
     CMD: for my $cmd (keys %cmds) {
         next CMD if defined $exceptions_hr->{$cmd};
+
         ### both mail and sendmail are special cases, mail is not required
         ### if "nomail" is set in REPORT_METHOD, and sendmail is only
         ### required if DShield alerting is enabled and a DShield user
@@ -9665,6 +10363,11 @@ sub check_commands() {
             next CMD unless ($config{'ENABLE_DSHIELD_ALERTS'} eq 'Y'
                     and $config{'DSHIELD_ALERT_EMAIL'} ne 'NONE');
         }
+
+        if ($cmd eq 'ip6tables') {
+            next CMD unless $config{'ENABLE_IPV6_DETECTION'} eq 'Y';
+        }
+
         unless (-x $cmds{$cmd}) {
             my $found = 0;
             PATH: for my $dir (@path) {
@@ -9735,9 +10438,9 @@ sub write_pid() {
 
 ### write command line to cmd file
 sub write_cmd_line() {
-    my ($args_aref, $cmdline_file) = @_;
+    my ($args_ar, $cmdline_file) = @_;
     open CMD, "> $cmdline_file";
-    print CMD "@$args_aref\n";
+    print CMD "@$args_ar\n";
     close CMD;
     chmod 0600, $cmdline_file;
     return;
@@ -9749,14 +10452,19 @@ sub write_cmd_line() {
 sub send_mail() {
     my ($subject, $body_file, $addr_str, $mailCmd) = @_;
     return if $no_email_alerts;
-    open MAIL, qq{| $mailCmd -s "$subject" $addr_str > /dev/null 2>&1} or die
-        qq{[*] Could not send mail: $mailCmd -s "$subject" $addr_str: $!};
+
+    my @mail_body_lines = ();
     if ($body_file) {
         open F, "< $body_file" or die "[*] Could not open mail file: ",
             "$body_file: $!";
-        my @lines = <F>;
+        @mail_body_lines = <F>;
         close F;
-        print MAIL for @lines;
+    }
+
+    open MAIL, qq{| $mailCmd -s "$subject" $addr_str > /dev/null 2>&1} or die
+        qq{[*] Could not send mail: $mailCmd -s "$subject" $addr_str: $!};
+    if ($body_file and @mail_body_lines) {
+        print MAIL for @mail_body_lines;
     }
     close MAIL;
     return;
@@ -9766,8 +10474,8 @@ sub send_mail() {
 sub print_sys_msg() {
     my ($msg, $file) = @_;
     open F, ">> $file" or die "[*] Could not open $file: $!";
-    print F scalar localtime(), " psad v$version (file ",
-        "rev: $rev_num) pid: $$ $msg";
+    print F scalar localtime(), " psad v$version ",
+        "pid: $$ $msg";
     close F;
     return;
 }
@@ -9797,11 +10505,14 @@ sub getopt_wrapper() {
         'analysis-write-data' => \$analyze_write_data, # Write data to filesystem from
                                                        # -A mode (this can take a long
                                                        # time).
+        'analyze-write-data'  => \$analyze_write_data,
         'analysis-fields=s' => \$analysis_fields, # Place a criteria on various fields
                                                   #   that are parsed from an iptables
                                                   #   logfile.
+        'analyze-fields=s'  => \$analysis_fields,
         'whois-analysis'    => \$analysis_whois,  # Issue whois lookups in analysis
                                                   #   mode.
+        'dns-analysis'      => \$enable_analysis_dns,  # Issue DNS lookups in -A mode.
         'email-analysis'    => \$analysis_emails, # Send analysis mode emails.
         'messages-file=s'   => \$fw_data_file,    # Specify the path to file containing
                                                   #   old iptables messages (fwdata by
@@ -9898,8 +10609,8 @@ sub getopt_wrapper() {
         'restrict-ip=s'     => \$restrict_ip,     # Only process packets that have
                                                   #   either this IP as the src or dst.
         'Benchmark'         => \$benchmark,       # Run in benchmark mode.
-        'packets=i'         => \$b_packets,       # Specify number of packets to use
-                                                  #   in benchmark test.
+        'packets=i'         => \$num_packets,     # Specify number of packets to use
+                                                  #   in benchmark test or in -A mode.
         'USR1'              => \$usr1,            # Send an existing psad process a
                                                   # USR1 signal (useful for debugging).
         'HUP'               => \$hup,             # Send psad processes a HUP signal
@@ -9913,6 +10624,7 @@ sub getopt_wrapper() {
                                                   #   fingerprint the remote OS.
         'no-signatures'     => \$no_signatures,   # Disable signature processing.
         'no-icmp-types'     => \$no_icmp_types,   # Disable icmp type/code validation.
+        'no-icmp6-types'    => \$no_icmp6_types,  # Disable icmp6 type/code validation.
         'no-auto-dl'        => \$no_auto_dl,      # Disable auto danger level
                                                   #   assignment.
         'no-daemon'         => \$no_daemon,       # Do not run as a daemon.
@@ -9926,6 +10638,8 @@ sub getopt_wrapper() {
                                                   #   messages to error log.
         'no-kmsgsd'         => \$no_kmsgsd,       # Do not start kmsgsd (used for
                                                   #   debugging).
+        'test-mode'         => \$test_mode,       # Enable test mode (used by the
+                                                  #   test suite).
         'verbose'           => \$verbose,         # Verbose output (for both alerts
                                                   #   and debug info).
         'Version'           => \$print_ver,       # Print the psad version and exit.
@@ -9935,15 +10649,14 @@ sub getopt_wrapper() {
 
     ### Print the version number and exit if -V given on the command line.
     if ($print_ver) {
-        print "[+] psad v$version (file revision: $rev_num)\n",
-        "      by Michael Rash <mbr\@cipherdyne.org>\n";
+        print "[+] psad v$version by Michael Rash <mbr\@cipherdyne.org>\n";
         exit 0;
     }
     return;
 }
 
 sub required_vars() {
-    my @required_vars = qw(
+    my @required_vars = (qw(
         EMAIL_ADDRESSES CHECK_INTERVAL FW_DATA_FILE FW_ERROR_LOG
         HOME_NET SNORT_SID_STR ENABLE_AUTO_IDS IGNORE_CONNTRACK_BUG_PKTS
         SCAN_TIMEOUT DANGER_LEVEL1 DANGER_LEVEL2 DANGER_LEVEL3
@@ -9986,8 +10699,10 @@ sub required_vars() {
         SYSLOG_FACILITY SYSLOG_PRIORITY ENABLE_EMAIL_LIMIT_PER_DST
         ENABLE_SYSLOG_FILE IPT_SYSLOG_FILE IPT_WRITE_FWDATA
         ETC_RSYSLOG_CONF IFCFGTYPE ENABLE_WHOIS_FORCE_ASCII
-        ENABLE_WHOIS_FORCE_SRC_IP
-    );
+        ENABLE_WHOIS_FORCE_SRC_IP ENABLE_IPV6_DETECTION
+        PERSISTENCE_CTR_THRESHOLD MAX_SCAN_IP_PAIRS INSTALL_ROOT
+        ICMP6_TYPES_FILE
+    ));
     &defined_vars(\@required_vars);
     return;
 }
@@ -9998,7 +10713,7 @@ sub usage() {
 
 psad: the Port Scan Attack Detector
 
-[+] Version: $version (file revision: $rev_num)
+[+] Version: $version
     By Michael Rash (mbr\@cipherdyne.org)
     URL: http://www.cipherdyne.org/psad/
 
@@ -10009,8 +10724,6 @@ Options:
     -A,  --Analyze-msgs           - Analyze iptables logfile and exit.
     -e,  --email-analysis         - Send emails for scans detected in
                                     offline analysis mode.
-    -w,  --whois-analysis         - Enable whois lookups when running in
-                                    offline analysis mode.
     -m,  --messages-file <file>   - Specify the path to the iptables logfile
                                     (for --Analyze-msgs mode).
     -i,  --interface <intf>       - Restrict detection to IN interface (for
@@ -10019,6 +10732,10 @@ Options:
     --sig-update                  - Download the latest set of psad
                                     signatures from:
                                     http://www.cipherdyne.org/
+    -w,  --whois-analysis         - Enable whois lookups when running in
+                                    offline --Analyze-msgs mode.
+    --dns-analysis                - Enable reverse DNS lookups in
+                                    --Analyze-msgs mode.
     --fw-analyze                  - Analyze the local iptables ruleset and
                                     exit.
     --fw-list-auto                - List the contents of any iptables chains
@@ -10054,8 +10771,8 @@ Options:
     -R,  --Restart                - Restart all running psad processes.
     -S,  --Status                 - Displays the status of any currently
                                     running psad processes.
-    --restrict-ip <IP address>    - Only process packets that have this IP
-                                    as the src or dst.
+    --restrict-ip <IP or net>     - Only process packets that have this IP
+                                    or network as the src or dst.
     --status-ip <IP address>      - View status for a specific IP.
     --status-dl <dl>              - Display status information for only
                                     those scans that have reach at least
@@ -10064,7 +10781,8 @@ Options:
                                     --Status and --Analyze modes.
     -B,  --Benchmark              - Run psad in benchmark mode.
     --packets <number>            - Specify number of packets to use in
-                                    benchmark test (default is 10,000).
+                                    --Analyze (default is unlimited) or
+                                    --Benchmark (default is 10,000) modes.
     -U,  --USR1                   - Send a running psad process a USR1
                                     signal (generates a dump of psad
                                     data structures on STDOUT).

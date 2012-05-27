@@ -26,8 +26,6 @@
 *     USA
 *
 ********************************************************************************
-*
-*  $Id: psad_funcs.c 2266 2009-04-01 03:48:41Z mbr $
 */
 
 /* includes */
@@ -323,7 +321,7 @@ void send_alert_email(const char *shCmd, const char *mailCmd,
     else if (child_pid > 0)
         wait(NULL);  /* mail better work */
     else
-        execle(shCmd, shCmd, "-c", mail_line, NULL, NULL);  /* don't use env */
+        execle(shCmd, shCmd, "-c", mail_line, (char *)NULL, (char *)NULL);  /* don't use env */
     return;
 }
 

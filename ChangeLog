@@ -1,3 +1,112 @@
+psad-2.2 (02/20/2012):
+    - Added support for detection of malicious traffic that is delivered via
+      IPv6.  This is accomplished by parsing ip6tables log messages - these are
+      in a slightly different format than the iptables log messages.  Here is
+      an example:
+
+        Mar 17 13:39:13 linux kernel: [956932.483644] DROP IN=eth0 OUT=
+        MAC=00:13:46:3a:41:36:00:1b:b9:76:9c:e4:86:dd
+        SRC=2001:0db8:0000:f101:0000:0000:0000:0002
+        DST=2001:0db8:0000:f101:0000:0000:0000:0001 LEN=80 TC=0 HOPLIMIT=64
+        FLOWLBL=0 PROTO=TCP SPT=50326 DPT=993 WINDOW=5760 RES=0x00 SYN URGP=0
+
+      Detection of malicious IPv6 traffic can be disabled via a new
+      ENABLE_IPV6_DETECTION config variable.
+
+    - For ICMP6 traffic, added protocol validation for ICMP6 type/code
+      combinations.
+    - Replaced Net::IPv4Addr with the excellent NetAddr::IP module which has
+      comprehensive support for IPv6 address network parsing and comparisons.
+    - Added a new test suite in the test/ directory to validate psad run time
+      operations (scan detection, signature matching, and more).  To support
+      this, a new '--install-test-dir' option was added to the install.pl
+      script.  Once this is executed, the test suite can be run via the
+      test-psad.pl script in the test/ directory.
+    - Added a new MAX_SCAN_IP_PAIRS config variable to allow psad memory usage
+      to be constrained by restricting the number of unique IP pairs that psad
+      This is useful for when psad is deployed on systems with little memory,
+      and is best utilized in conjunction with disabling ENABLE_PERSISTENCE so
+      that old scans will also be deleted (and thereby making room for tracking
+      new scans under the MAX_SCAN_IP_PAIRS threshold).
+    - Bug fix for 'qw(...) usage as parenthesis' warnings for perl > 5.14
+    - Bug fix that caused psad to emit the following:
+
+        Undefined subroutine &main::LOG_DAEMON called at ./psad line 10071.
+
+      This problem was noticed by Robert and reported on the psad mailing list.
+    - Added --install-root to the install.pl script so that psad can be
+      installed in a directory specified by the user as opposed to the normal
+      system default.  This was a suggestion from @pyllyukko.
+    - Added PERL5LIB env variable usage to the install.pl script so that module
+      installs can reference the current install path.
+    - Updated to the latest p0f signatures from OpenBSD.
+    - Altered the 'ET MALWARE Bundleware Spyware CHM Download' Snort rule in
+      the bundled Emerging Threats rule set to make sure that ClamAV does not
+      flag on the pattern "mhtml\:file\://" which is associated with the
+      following ClamAV signature:
+
+        $ grep Exploit.HTML.MHTRedir-8 main.ndb
+        Exploit.HTML.MHTRedir-8:3:*:6d68746d6c3a66696c653a2f2f{1-20}2168
+
+      An analysis of this issue was posted here:
+
+        http://www.cipherdyne.org/blog/2010/08/22.html
+
+    - Bug fix for ICMP packet handling where psad would incorrectly interpret
+      ICMP port unreachable messages as UDP packets because the UDP specifics
+      are included in the iptables log message.  This bug was first reported by
+      Lukas Baxa to the Debian maintainers and was followed up by Franck
+      Joncourt:
+
+        http://bugs.debian.org/cgi-bin/bugreport.cgi?bug=596240
+
+      An example ICMP log message that exposed the bug is included below:
+
+      Sep  8 18:04:26 baxic kernel: [28241.572876] IN_DROP IN=wlan0
+      OUT= MAC=00:1a:9f:91:df:ae:00:21:27:e8:0a:a0:08:00
+      SRC=10.0.0.138 DST=192.168.1.103 LEN=96 TOS=0x00 PREC=0xC0 TTL=254
+      ID=63642 PROTO=ICMP TYPE=3 CODE=3
+      [SRC=192.168.1.103 DST=10.0.0.138 LEN=68 TOS=0x00 PREC=0x00 TTL=0
+      ID=22458 PROTO=UDP SPT=35080 DPT=33434 LEN=48 ]
+
+    - Updated the bundled whois client to 5.0.6.
+    - Removed the ExtUtils::MakeMaker RPM build requirement from the psad.spec
+      file.  This is a compromise which will allow the psad RPM to be built
+      even if RPM dosen't or can't see that ExtUtils::MakeMaker is installed -
+      most likely it will build anyway.  If it doesn't, there are bigger
+      problems since psad is written in perl.  If you want to build the psad
+      RPM with a .spec file that requires ExtUtils::MakeMaker, then use the
+      "psad-require-makemaker.spec" file that is bundled in the psad sources.
+    - Switched to git from svn - comprehensive psad development history can
+      can acquired through gitweb:
+
+        http://www.cipherdyne.org/cgi-bin/gitweb.cgi?p=psad.git;a=summary
+
+      or through git itself:
+
+        $ git clone http://www.cipherdyne.org/git/psad psad.git
+
+    - Updated to IPTables::ChainMgr 1.2 and IPTables::Parse 1.1 in the deps/
+      directory.
+    - In the /var/log/psad/<ip>/ directories, whois information is stored in
+      the <IP>_whois files, the IP in the filename was included as a
+      destination IP under the psad -S output.  This has been fixed.  Here is
+      an example of the invalid output:
+
+        [+] IP Status Detail:
+            SRC:  123.123.123.221, DL: 2, Dsts: 2, Pkts: 1, Unique sigs: 1,
+                    Email alerts: 1
+            DST: 1.2.3.4, Local IP
+                Scanned ports: TCP 1433, Pkts: 1, Chain: INPUT, Intf: eth0
+                Signature match: "MISC Microsoft SQL Server communication attempt"
+                    TCP, Chain: INPUT, Count: 1, DP: 1433, SYN, Sid: 100205
+            DST: 123.123.123.221
+
+    - By default the install.pl script records user answers to installation
+      queries so they can be used to install psad in an automated fashion later.
+      A new option --Use-answers makes this possible.  This feature was requests
+      by @pyllyukko.
+
 psad-2.1.7 (07/14/2010):
     - (Dan A. Dickey) Added the ability to use the "ip" command from the
       iproute2 tools to acquire IP addresses from local interfaces.  Dan's
@@ -15,7 +124,7 @@ psad-2.1.7 (07/14/2010):
         <<< 554 5.6.1 Eight bit data not allowed
         554 5.0.0 Service unavailable
 
-    - Updated psad to issues whois lookups against IP addresses that are not
+    - Updated psad to issue whois lookups against IP addresses that are not
       directly connected to the local system.  This is useful for example when
       an internal system is scanning an external destination system, and the
       scan is logged in the FORWARD chain.  Issuing whois lookups on the
@@ -345,7 +454,7 @@ psad-2.0 (12/10/2006):
       icmp_id, icmp_seq, itype, icode, ip_proto, ipopts, and sameip.
     - Refactored all signatures in /etc/psad/signatures to conform to new
       signature matching support in this release.  There are now about 190
-      signatures that psad can run directly against Netfilter logging
+      signatures that psad can run directly against iptables logging
       messages (i.e. without the help of fwsnort).
     - Added the ability to download the latest signatures file from
       http://www.cipherdyne.org/psad/signatures with the --sig-update command
@@ -363,7 +472,7 @@ psad-2.0 (12/10/2006):
     - Added --CSV mode so that psad can be used to generate comma-separated
       value output suitable for the AfterGlow project (see
       http://afterglow.sourceforge.net/index.html) for graphical
-      representations of Netfilter logs and associated scan data.  Also added
+      representations of iptables logs and associated scan data.  Also added
       nf2csv so that normal users can take advantage of this feature.
     - Added emulation of the Snort "dsize" test through the use of the IP
       length field for TCP/ICMP signatures, and the UDP length field for UDP
@@ -414,7 +523,7 @@ psad-2.0 (12/10/2006):
     - Bugfix to cleanup any lost blocking rules from the running psad
       timeouts (a separate process might have deleted rules from the psad
       chains).
-    - Bugfix to allow Netfilter log messages to include the PHYSDEV (i.e.
+    - Bugfix to allow iptables log messages to include the PHYSDEV (i.e.
       PHYSIN and PHYSOUT) interfaces.
     - Updated to read architecture-dependent perl module installation
       directory out of /usr/lib/psad (e.g. "/usr/lib/psad/x86_64-linux")
@@ -471,7 +580,7 @@ psad-1.4.7 (09/10/2006):
       is ok upon an unsuccessful test of the syslog reconfiguration.  This
       fixes a bug where some syslog daemons might not re-import their
       configurations after receiving a HUP signal.
-    - Bugfix for incorrect config variable name that gated Netfilter
+    - Bugfix for incorrect config variable name that gated iptables
       prerequisite checks.
     - Added code to install.pl to update command paths in psad.conf and
       psadwatchd.conf if any of the paths are broken (i.e. the local system
@@ -490,7 +599,7 @@ psad-1.4.6 (06/13/2006):
       logging prefixes.
     - Added code to save DShield email to a file.
     - Added IPTABLES_PREREQ_CHECK to allow the administrator to control the
-      frequency of Netfilter checks (for auto-block compatibility).
+      frequency of iptables checks (for auto-block compatibility).
     - Added IGNORE_LOG_PREFIXES to allow certain log prefixes to be completely
       ignored by psad.
     - Added classification.config file from Snort-2.3.3 so that psad can
@@ -514,7 +623,7 @@ psad-1.4.5 (01/13/2006):
       this directory is removed by some Linux distributions at boot time.
     - Bugfix for zero masks in auto_dl; this allows a network of "0.0.0.0/0"
       to be specified.
-    - Added ENABLE_FW_LOGGING_CHECK so that the Netfilter policy check can be
+    - Added ENABLE_FW_LOGGING_CHECK so that the iptables policy check can be
       enabled/disabled easily via psad.conf.
     - Enhanced -D output to include "uname -a" and "perl -V" output.
     - Added ENABLE_RENEW_BLOCK_EMAILS to allow whether renew emails are sent
@@ -539,7 +648,7 @@ psad-1.4.4 (11/27/2005):
       keyword "TRUNCATE_FWDATA" (this is enabled by default).
     - Bugfix in auto-blocking mode for deleting AUTO_IPT_SOCK when a HUP
       signal is received.
-    - Bugfix for parsing Netfilter policies that contain ULOG logging rules
+    - Bugfix for parsing iptables policies that contain ULOG logging rules
       instead of the standard LOG target.
     - Removed the smtpdaemon requirement in the RPM because psad might be
       configured to not send email alerts.
@@ -555,7 +664,7 @@ psad-1.4.3 (09/27/2005):
       messages.  This drastically reduces the amount of memory required
       by psad.
     - Updated to only display psad chains if --verbose is set
-    - Updated to automatically flush the psad auto-response Netfilter chains
+    - Updated to automatically flush the psad auto-response iptables chains
       at start time (subject to a new config keyword "FLUSH_IPT_AT_INIT").
 
 psad-1.4.2 (07/15/2005):
@@ -565,7 +674,7 @@ psad-1.4.2 (07/15/2005):
     - Updated to version 0.2 of the IPTables::ChainMgr module.
     - Updated to not truncate the fwdata file upon psad startup.
     - Added --fw-dump which produces a sanitized (i.e. no IP addresses)
-      version of the local Netfilter policy.  Also added --fw-include-ips
+      version of the local iptables policy.  Also added --fw-include-ips
       to (optionally) not sanitize IPs/nets.  Note that the 0.0.0.0 and
       0.0.0.0/0 IPs/nets are not sanitized since they give no useful
       information about specific IPs/nets.
@@ -596,14 +705,14 @@ psad-1.4.1 (03/12/2005):
     - Updated Psad module directory structure to be consistent with current
       versions of perl (5.8.x).
     - Added IPTables::ChainMgr module.
-    - Completely re-worked the Netfilter auto-blocking code to use
+    - Completely re-worked the iptables auto-blocking code to use
       IPTables::ChainMgr functions so that auto-generated rules are placed
       in chains created by psad.
     - Added IPT_AUTO_CHAIN keyword in psad.conf which is used to define the
-      set of chains to which auto-generated Netfilter rules are added.
-    - Added --fw-list-auto to display the contents of psad Netfilter
+      set of chains to which auto-generated iptables rules are added.
+    - Added --fw-list-auto to display the contents of psad iptables
       chains.
-    - Added the ability to import an IP into the Netfilter auto-blocking
+    - Added the ability to import an IP into the iptableiptablesocking
       chains from the command line with --fw-block-ip.  This allows psad to
       apply its timeout mechanism against such IPs/nets.
     - Added the ability to ignore packets based on input interface with

@@ -3,7 +3,6 @@
 # Distributed under the terms of the GNU General Public License v2
 # Author: Michael Rash
 #    Developed for the Gentoo Linux distribution
-# $Id: psad-init.gentoo 2234 2008-08-27 00:08:36Z mbr $
 
 depend() {
 	need logger
