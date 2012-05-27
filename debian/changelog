@@ -4,8 +4,9 @@ psad (2.2-1) UNRELEASED; urgency=low
     + Bug fix for ICMP packet handling (Closes: #596240 )
     + Bug fix for 'qw(...) usage as parenthesis' warnings for perl > 5.14
       (Closes: #655040)
-  * Updated perl dependency from libnetwork-ipv4addr-perl to libnet-ip-perl
-    in d.control.
+    + Updated perl dependency from libnetwork-ipv4addr-perl to libnet-ip-perl
+      in d.control.
+    + Added the icmp6_types file in /etc/psad through d.rules.
   * Refreshed copyright holders in d.copyright.
   * Refreshed patch fixes_build.diff.
   * Bumped up Standards-Version to 3.9.3.
