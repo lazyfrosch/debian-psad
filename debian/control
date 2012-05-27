@@ -13,7 +13,7 @@ Package: psad
 Architecture: linux-any
 Depends: ${misc:Depends}, ${shlibs:Depends}, ${perl:Depends},
  libunix-syslog-perl, iptables, rsyslog | system-log-daemon,
- libnetwork-ipv4addr-perl, libdate-calc-perl, libcarp-clan-perl,
+ libnet-ip-perl, libdate-calc-perl, libcarp-clan-perl,
  whois, psmisc, libiptables-parse-perl, libiptables-chainmgr-perl,
  default-mta | mail-transport-agent, bsd-mailx | mailx | mailutils,
  lsb-base (>= 3.0-6)
