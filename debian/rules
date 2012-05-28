@@ -17,11 +17,15 @@ else
      CFLAGS += -O2
 endif
 
-build: build-stamp
+build: build-arch build-indep
+
+build-arch: build-stamp
 build-stamp:
 	dh_testdir
 	make all OPTS="$(CFLAGS)"
 	touch $@ 
+
+build-indep:
 
 clean:
 	dh_testdir
@@ -30,7 +34,6 @@ clean:
 	dh_clean build-stamp
 
 install:
-install: build
 	dh_testdir
 	dh_testroot
 	dh_prep
@@ -54,7 +57,7 @@ install: build
 
 binary-indep:
 
-binary-arch: build install
+binary-arch: build-arch install
 	dh_testdir
 	dh_testroot
 	dh_installdocs
@@ -72,4 +75,4 @@ binary-arch: build install
 	dh_builddeb
 
 binary: binary-indep binary-arch
-.PHONY: build clean binary-indep binary-arch binary install
+.PHONY: build clean binary-indep binary-arch binary install build-indep
