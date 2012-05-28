@@ -7,7 +7,8 @@ psad (2.2-1) UNRELEASED; urgency=low
     + Updated perl dependency from libnetwork-ipv4addr-perl to libnet-ip-perl
       in d.control.
     + Added the icmp6_types file in /etc/psad through d.rules.
-  * Refreshed copyright holders in d.copyright.
+  * Refreshed copyright holders and updated d.copyright to comply with the 1.0
+    machine-readable copyright file specification.
   * Refreshed patch fixes_build.diff.
   * Bumped up Standards-Version to 3.9.3.
   * Added LSB description in d.psad.init.
