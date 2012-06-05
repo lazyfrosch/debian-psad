@@ -1,3 +1,11 @@
+psad (2.2-2) unstable; urgency=low
+
+  * d.psad.preinst: Revert the changes done by the postinst script in the
+    preinst script so that dpkg does not see any configuration changes and
+    does not trigger the user during upgrade. (Closes: #675231).
+
+ -- Franck Joncourt <franck@debian.org>  Tue, 05 Jun 2012 23:06:42 +0200
+
 psad (2.2-1) unstable; urgency=low
 
   * Imported Upstream version 2.2
