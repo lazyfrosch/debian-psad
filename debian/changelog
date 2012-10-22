@@ -1,3 +1,15 @@
+psad (2.2-2.1) UNRELEASED; urgency=low
+
+  * Non-maintainer upload.
+  * Fix "modifies conffiles (policy 10.7.3): /etc/psad/psad.conf"
+    - revert changes in debian/psad.preinst from 2.2-2
+    - install psad.conf to /usr/share/psad instead of /etc/psad
+    - copy it to /etc/psad in debian/psad.postinst if it doesn't exist
+    - remove in in debian/psad.postrm (purge)
+    (Closes: #688891)
+
+ -- gregor herrmann <gregoa@debian.org>  Sun, 21 Oct 2012 17:05:38 +0200
+
 psad (2.2-2) unstable; urgency=low
 
   * d.psad.preinst: Revert the changes done by the postinst script in the

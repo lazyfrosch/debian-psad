@@ -1,50 +1,13 @@
 #!/bin/sh
 
+# This script is only intended to fix bug #497574.
+# We check for an upgrade from Psad older than 2.1.5 and remove the old
+# Psad process if needed.
 #
-# Update_conf
-#
-# This function searchs a key entry in a file and updates its value with the new
-# one.
-#
-# Syntax:
-#
-#    update_conf new_val key conffile
-#      -> new_val ... : Value to set for the key value
-#      -> key ....... : Name of the key to be updated
-#      -> conffile .. : File to search
-#
-update_conf ()
-{
-        local new_val
-        local key
-        local conffile
-
-        new_val=$1
-        key=$2
-        conffile=$3
-
-        cp $conffile $conffile.old
-
-        old_val=`awk '$1 == "'$key'" { print $2 }' $conffile`
-        awk '$1 == "'$key'" { gsub("'$old_val'","'$new_val';",$0); \
-                           print $0 } \
-                 $1 != "'$key'" { print $0 }' \
-                 $conffile.old > $conffile
-
-        rm $conffile.old
-}
+# NB: As some commands can return an exit code other than 0 we do not use
+# *set -e* at the beginning.
 
 if [ "$1" = "upgrade" ]; then
-
-    # Revert changes added to the configuration file by the postinst script
-    update_conf "_CHANGEME_" "HOSTNAME" "/etc/psad/psad.conf"
-
-    # This script is only intended to fix bug #497574.
-    # We check for an upgrade from Psad older than 2.1.5 and remove the old
-    # Psad process if needed.
-    #
-    # NB: As some commands can return an exit code other than 0 we do not use
-    # *set -e* at the beginning.
 
     status=1;
     if [ -x "`which dpkg 2>/dev/null`" ]; then 

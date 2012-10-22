@@ -38,6 +38,9 @@ update_conf ()
 
 if [ "$1" = "configure" ]; then
 
+    if [ ! -e /etc/psad/psad.conf ]; then
+        cp /usr/share/psad/psad.conf /etc/psad/psad.conf
+    fi
     NAME=`hostname`
     update_conf "$NAME" "HOSTNAME" "/etc/psad/psad.conf"
  

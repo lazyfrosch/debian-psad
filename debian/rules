@@ -9,6 +9,7 @@ DESTDIR         = $(CURDIR)/debian/$(PROGRAM)/
 DESTDIR_BIN     = $(CURDIR)/debian/$(PROGRAM)/usr/bin/
 DESTDIR_SBIN    = $(CURDIR)/debian/$(PROGRAM)/usr/sbin/
 DESTDIR_ETC     = $(CURDIR)/debian/$(PROGRAM)/etc/$(PROGRAM)/
+DESTDIR_SHARE   = $(CURDIR)/debian/$(PROGRAM)/usr/share/$(PROGRAM)/
 
 CFLAGS = -Wall -g
 ifneq (,$(filter noopt,$(DEB_BUILD_OPTIONS)))
@@ -47,7 +48,7 @@ install:
 
 	$(INSTALL_DATA) signatures $(DESTDIR_ETC)
 	$(INSTALL_DATA) auto_dl $(DESTDIR_ETC)
-	$(INSTALL_DATA) psad.conf $(DESTDIR_ETC)
+	$(INSTALL_DATA) psad.conf $(DESTDIR_SHARE)
 	$(INSTALL_DATA) pf.os $(DESTDIR_ETC)
 	$(INSTALL_DATA) ip_options $(DESTDIR_ETC)
 	$(INSTALL_DATA) snort_rule_dl $(DESTDIR_ETC)
