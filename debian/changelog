@@ -1,12 +1,13 @@
 psad (2.2-3) unstable; urgency=low
 
-  [ gregor herrmann ]
   * Fix "modifies conffiles (policy 10.7.3): /etc/psad/psad.conf"
     (Closes: #688891). Thanks gregoa to help me fix this.
     - Reverted the changes from 2.2-2 in d.psad.preinst.
     - Removed the d.psad.postinst script which updated the HOSTNAME variable
       from psad.conf. The psad daemon can start without the default value in
       psad.conf (_CHANGEME_).
+  * Removed the /var/run/psad directory in d.psad.postrm when purging the
+    package.
 
  -- Franck Joncourt <franck@debian.org>  Sun, 28 Oct 2012 15:47:04 +0100
 

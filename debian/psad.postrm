@@ -10,6 +10,7 @@ if [ "$1" = "purge" ]; then
     if [ -d /var/run/psad ];then
         find /var/run/psad/ -type f -exec rm {} \;
         find /var/run/psad/ -type s -exec rm {} \;
+        rmdir /var/run/psad
     fi
 
     # Clean the config directory /etc/psad
