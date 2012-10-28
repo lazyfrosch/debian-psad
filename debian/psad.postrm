@@ -28,11 +28,6 @@ if [ "$1" = "purge" ]; then
         rm -rf /var/log/psad/*
     fi
 
-    # Handle the generated configuration file
-    if [ -e /etc/psad/psad.conf ]; then
-        rm -f /etc/psad/psad.conf
-    fi
- 
 fi
 
 #DEBHELPER#

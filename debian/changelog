@@ -1,14 +1,14 @@
-psad (2.2-2.1) UNRELEASED; urgency=low
+psad (2.2-2.1) unstable; urgency=low
 
-  * Non-maintainer upload.
+  [ gregor herrmann ]
   * Fix "modifies conffiles (policy 10.7.3): /etc/psad/psad.conf"
-    - revert changes in debian/psad.preinst from 2.2-2
-    - install psad.conf to /usr/share/psad instead of /etc/psad
-    - copy it to /etc/psad in debian/psad.postinst if it doesn't exist
-    - remove in in debian/psad.postrm (purge)
-    (Closes: #688891)
+    (Closes: #688891). Thanks gregoa to help me fix this.
+    - Reverted the changes from 2.2-2 in d.psad.preinst.
+    - Removed the d.psad.postinst script which updated the HOSTNAME variable
+      from psad.conf. The psad daemon can start without the default value in
+      psad.conf (_CHANGEME_).
 
- -- gregor herrmann <gregoa@debian.org>  Sun, 21 Oct 2012 17:05:38 +0200
+ -- Franck Joncourt <franck@debian.org>  Sun, 28 Oct 2012 15:47:04 +0100
 
 psad (2.2-2) unstable; urgency=low
 

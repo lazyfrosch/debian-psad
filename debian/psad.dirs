@@ -4,4 +4,3 @@ var/log/psad
 var/lib/psad
 etc/psad
 etc/psad/snort_rules
-usr/share/psad
