@@ -1,3 +1,14 @@
+psad (2.2-3.1) unstable; urgency=low
+
+  * Non-maintainer upload with maintainer's approval.
+  * Fix "modifies conffiles (policy 10.7.3): /etc/psad/psad.conf", second try:
+    - add back changes to d.psad.preinst that revert changes to
+      /etc/psad/psad.conf
+    - but only for upgrades from versions before 2.2-3
+    (Closes: #688891)
+
+ -- gregor herrmann <gregoa@debian.org>  Sun, 18 Nov 2012 22:25:13 +0100
+
 psad (2.2-3) unstable; urgency=low
 
   * Fix "modifies conffiles (policy 10.7.3): /etc/psad/psad.conf"
