@@ -7,6 +7,7 @@ psad (2.2-4) UNRELEASED; urgency=low
     - d.rules : added the hardening stanza
     - fixes_build.diff : updated the Makefile to use the CFLAGS, CPPFLAGS
       and LDFLAGS.
+    - d.control : Added BD on dpkg-dev (>= 1.16.1~)
 
  -- Franck Joncourt <franck@debian.org>  Thu, 22 Nov 2012 22:03:38 +0100
 
