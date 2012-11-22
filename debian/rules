@@ -1,5 +1,9 @@
 #!/usr/bin/make -f
 
+export DEB_BUILD_MAINT_OPTIONS = hardening=+all
+DPKG_EXPORT_BUILDFLAGS = 1
+include /usr/share/dpkg/buildflags.mk
+
 INSTALL         = install
 INSTALL_PROGRAM = $(INSTALL)
 INSTALL_DATA    = $(INSTALL) -m 644
@@ -10,19 +14,12 @@ DESTDIR_BIN     = $(CURDIR)/debian/$(PROGRAM)/usr/bin/
 DESTDIR_SBIN    = $(CURDIR)/debian/$(PROGRAM)/usr/sbin/
 DESTDIR_ETC     = $(CURDIR)/debian/$(PROGRAM)/etc/$(PROGRAM)/
 
-CFLAGS = -Wall -g
-ifneq (,$(filter noopt,$(DEB_BUILD_OPTIONS)))
-     CFLAGS += -O0
-else
-     CFLAGS += -O2
-endif
-
 build: build-arch build-indep
 
 build-arch: build-stamp
 build-stamp:
 	dh_testdir
-	make all OPTS="$(CFLAGS)"
+	make all
 	touch $@ 
 
 build-indep:
@@ -41,7 +38,6 @@ install:
 
 	$(INSTALL_PROGRAM) $(PROGRAM) $(DESTDIR_SBIN)
 	$(INSTALL_PROGRAM) psadwatchd $(DESTDIR_SBIN)
-	$(INSTALL_PROGRAM) kmsgsd $(DESTDIR_SBIN)
 	$(INSTALL_PROGRAM) nf2csv $(DESTDIR_BIN)
 	$(INSTALL_PROGRAM) fwcheck_psad.pl $(DESTDIR_SBIN)fwcheck_psad
 

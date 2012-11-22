@@ -1,3 +1,15 @@
+psad (2.2-4) UNRELEASED; urgency=low
+
+  * Acknowledged NMU (2.2-3.1).
+  * d.rules : do not install the kmsgd daemon anymore since it is not
+    used anymore.
+  * Allowed the makefile to use the hardening flags :
+    - d.rules : added the hardening stanza
+    - fixes_build.diff : updated the Makefile to use the CFLAGS, CPPFLAGS
+      and LDFLAGS.
+
+ -- Franck Joncourt <franck@debian.org>  Thu, 22 Nov 2012 22:03:38 +0100
+
 psad (2.2-3.1) unstable; urgency=low
 
   * Non-maintainer upload with maintainer's approval.
