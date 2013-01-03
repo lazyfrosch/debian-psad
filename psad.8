@@ -82,6 +82,12 @@ to point psad at your
 .I /var/log/messages
 file.
 .TP
+.BR \-\^\-analysis-fields\ \<search\ fields>
+In \-\-Analyze mode restrict analysis to iptables log messages that have specific
+values for particular fields.  Examples include "SRC:1.2.3.4", "DST:10.0.0.0/24,
+and "TTL:64", and multiple fields are supported as a comma-separated list like
+"SRC:1.2.3.4, LEN:44, DST:10.0.0.0/24".
+.TP
 .BR \-i "\fR,\fP " \-\^\-interface\ \<interface>
 Specify the interface that
 .B psad
@@ -252,6 +258,12 @@ does not issue whois lookups when running in \-\-Analyze-msgs mode.  The
 and instruct psad to issue whois lookups against IP addresses from which scans
 or other suspect traffic has originated.
 .TP
+.BR \-\^\-analysis-auto-block
+Enable auto-blocking responses when running in \-\-Analyze-msgs mode.  This is
+mostly useful only for the
+.B psad
+test suite when auto-blocking responses are tested and verified.
+.TP
 .BR \-\^\-snort-type\ \<type>
 Restrict the type of snort sids to
 .I type.
@@ -268,7 +280,7 @@ Manually specify the path to the passive operating system fingerprinting
 signatures file.  The default is
 .I /etc/psad/posf.
 .TP
-.BR \-a "\fR,\fP " \-\^\-auto-dl\ \<auto-dl-file>
+.BR \-\^\-auto-dl\ \<auto-dl-file>
 Occasionally certain IP addresses are repeat offenders and
 should automatically be given a higher danger level than
 would normally be assigned.  Additionally, some IP addresses
@@ -279,7 +291,7 @@ for example).
 provides an interface for psad to automatically
 increase/decrease/ignore scanning IP danger levels.  Modifications
 can be made to auto_dl (installed by default in /etc/psad)
-and psad will import them with 'psad -H' or by restarting the psad process.
+and psad will import them with 'psad \-H' or by restarting the psad process.
 .TP
 .BR \-\^\-fw-search\ \<fw_search-file>
 By default all of the psad makes use of the firewall search configuration

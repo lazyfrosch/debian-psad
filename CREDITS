@@ -471,3 +471,26 @@ Lukas Baxa
     - Suggested the ability to have install.pl read answers to queries from a
       file in the filesystem in order to support easy automated installs of
       psad.
+
+Kat
+    - Reported 'Could not resolve sub-var: INSTALL_ROOT to a value' error in
+      the legacy kmsgsd daemon for psad-2.2.
+
+Gregorio Narvaez
+    - Reported a NetAddr::IP usage bug in "-A --analysis-fields" mode with IP
+      searches.
+
+Pui Edylie
+    - Reported a problem where psad could not map an fwsnort log message back
+      to the corresponding Snort 'msg' field.  Added the FWSNORT_RULES_DIR
+      variable to have psad read Snort rules from any installed fwsnort
+      instance.
+
+Oscar Marley
+    - Suggested configurable auto-blocking timeout values depending on the
+      danger level that a scan or attack achieves.  This resulted in the
+      implementation of the AUTO_BLOCK_DL*_TIMEOUT variables.
+
+Naji Mouawad
+    - Suggested the ability to throttle email alerts that psad sends.  The
+      This resulted in the implementation of the EMAIL_THROTTLE variable.
