@@ -9,6 +9,7 @@ psad (2.2.1-1) unstable; urgency=low
       and LDFLAGS.
     - d.control : Added BD on dpkg-dev (>= 1.16.1~)
   * Imported Upstream version 2.2.1
+    - Removed applied patch t_upstream_hyphen.diff.
 
  -- Franck Joncourt <franck@debian.org>  Thu, 03 Jan 2013 22:38:09 +0100
 
