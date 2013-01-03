@@ -10,6 +10,10 @@ psad (2.2.1-1) unstable; urgency=low
     - d.control : Added BD on dpkg-dev (>= 1.16.1~)
   * Imported Upstream version 2.2.1
     - Removed applied patch t_upstream_hyphen.diff.
+  * Bumped up Standards-Version to 3.9.4:
+    - Added dependency ind.control against initscripts (>= 2.88dsf-13.3)
+      to ensure the run directory is available.
+  * d.control: Removed BD against lsb-base.
 
  -- Franck Joncourt <franck@debian.org>  Thu, 03 Jan 2013 22:38:09 +0100
 

@@ -4,7 +4,7 @@ Priority: optional
 Maintainer: Franck Joncourt <franck@debian.org>
 Uploaders: Daniel Gubser <guterm@debian.org>
 Build-Depends: debhelper (>= 7), dpkg-dev (>= 1.16.1~)
-Standards-Version: 3.9.3
+Standards-Version: 3.9.4
 Vcs-git: git://git.debian.org/git/collab-maint/psad.git
 Vcs-Browser: http://git.debian.org/?p=collab-maint/psad.git
 Homepage: http://www.cipherdyne.org/psad/
@@ -16,7 +16,7 @@ Depends: ${misc:Depends}, ${shlibs:Depends}, ${perl:Depends},
  libnet-ip-perl, libdate-calc-perl, libcarp-clan-perl,
  whois, psmisc, libiptables-parse-perl, libiptables-chainmgr-perl,
  default-mta | mail-transport-agent, bsd-mailx | mailx | mailutils,
- lsb-base (>= 3.0-6)
+ lsb-base, initscripts (>= 2.88dsf-13.3)
 Suggests: fwsnort, bastille
 Description: Port Scan Attack Detector
  PSAD is a collection of four lightweight system daemons (in Perl and
