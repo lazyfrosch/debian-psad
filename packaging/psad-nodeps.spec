@@ -1,5 +1,5 @@
 %define name psad
-%define version 2.2
+%define version 2.2.1
 %define release 1
 %define psadlogdir /var/log/psad
 %define psadrundir /var/run/psad
@@ -100,7 +100,6 @@ install -m 644 nf2csv.1 $RPM_BUILD_ROOT%{_mandir}/man1/
 ### put the current hostname into the psad C binaries
 ### (kmsgsd and psadwatchd).
 perl -p -i -e 'use Sys::Hostname; my $hostname = hostname(); s/HOSTNAME(\s+)_?CHANGE.?ME_?/HOSTNAME${1}$hostname/' %_sysconfdir/%name/psad.conf
-perl -p -i -e 'use Sys::Hostname; my $hostname = hostname(); s/HOSTNAME(\s+)_?CHANGE.?ME_?/HOSTNAME${1}$hostname/' %_sysconfdir/%name/psadwatchd.conf
 
 /bin/touch %psadlogdir/fwdata
 chown root.root %psadlogdir/fwdata
@@ -119,8 +118,7 @@ chmod 0600 %psadvarlibdir/psadfifo
 if grep -q "EMAIL.*root.*localhost" /etc/psad/psad.conf;
 then
 echo "[+] You can edit the EMAIL_ADDRESSES variable in /etc/psad/psad.conf"
-echo "    /etc/psad/psadwatchd.conf to have email alerts sent to an address"
-echo "    other than root\@localhost"
+echo "    to have email alerts sent to an address other than root\@localhost"
 fi
 
 if grep -q "HOME_NET.*CHANGEME" /etc/psad/psad.conf;
@@ -155,6 +153,9 @@ fi
 %config(noreplace) %_sysconfdir/%name/icmp6_types
 
 %changelog
+* Wed Jan 02 2013 Michael Rash <mbr@cipherdyne.org>
+- psad-2.2.1 release
+
 * Wed Apr 18 2012 Michael Rash <mbr@cipherdyne.org>
 - Update to use the NetAddr::IP module for all IP/subnet calculations
 - psad-2.2 release
