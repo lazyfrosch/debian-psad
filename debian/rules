@@ -38,6 +38,7 @@ install:
 
 	$(INSTALL_PROGRAM) $(PROGRAM) $(DESTDIR_SBIN)
 	$(INSTALL_PROGRAM) psadwatchd $(DESTDIR_SBIN)
+	$(INSTALL_PROGRAM) kmsgsd $(DESTDIR_SBIN)
 	$(INSTALL_PROGRAM) nf2csv $(DESTDIR_BIN)
 	$(INSTALL_PROGRAM) fwcheck_psad.pl $(DESTDIR_SBIN)fwcheck_psad
 

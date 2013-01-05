@@ -12,7 +12,7 @@ Signed-off-by: Franck Joncourt <franck@debian.org>
 
 --- a/Makefile
 +++ b/Makefile
-@@ -24,10 +24,11 @@
+@@ -24,10 +24,12 @@
  ##########################################################################
  #
  
@@ -23,6 +23,7 @@ Signed-off-by: Franck Joncourt <franck@debian.org>
 -	/usr/bin/gcc -Wall -O kmsgsd.c psad_funcs.c strlcpy.c strlcat.c -o kmsgsd
 -	/usr/bin/gcc -Wall -O psadwatchd.c psad_funcs.c strlcpy.c strlcat.c -o psadwatchd
 +all : psadwatchd.c psad_funcs.c strlcpy.c strlcat.c psad.h
++	/usr/bin/gcc $(CFLAGS) $(CPPFLAGS) $(LDFLAGS) kmsgsd.c psad_funcs.c strlcpy.c strlcat.c -o kmsgsd
 +	/usr/bin/gcc $(CFLAGS) $(CPPFLAGS) $(LDFLAGS) psadwatchd.c psad_funcs.c strlcpy.c strlcat.c -o psadwatchd
  
  ### debug mode
