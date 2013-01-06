@@ -3,6 +3,7 @@ psad (2.2.1-2) unstable; urgency=low
   * Enabled back the kmsgsd daemon.
     - Refreshed patch fixes_build.diff.
     - d.rules: Added back the kmsgsd daemon.
+  * d.rules: Added missing protocols files into /etc/psad.
 
  -- Franck Joncourt <franck@debian.org>  Sat, 05 Jan 2013 15:18:43 +0100
 
