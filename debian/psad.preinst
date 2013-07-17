@@ -34,13 +34,18 @@ update_conf ()
         rm $conffile.old
 }
 
-if [ "$1" = "upgrade" ]; then
+if [ "$1" = "upgrade" -o "$1" = "install" ]; then
 
     # Revert changes added to the configuration file by the postinst script
     # if we are upgrading from a version which changed it (#688891)
+    # or if we are installed with a prior version (#675231)
     if [ -n "$2" ] && dpkg --compare-versions 2.2-3 gt $2 ; then
         update_conf "_CHANGEME_" "HOSTNAME" "/etc/psad/psad.conf"
     fi
+
+fi
+
+if [ "$1" = "upgrade" ]; then
 
     # This script is only intended to fix bug #497574.
     # We check for an upgrade from Psad older than 2.1.5 and remove the old

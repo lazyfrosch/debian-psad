@@ -1,3 +1,14 @@
+psad (2.2.1-2.1) unstable; urgency=low
+
+  * Non-maintainer upload with maintainer's permission.
+  * Fix "prompting due to modified conffiles which were not modified by
+    the user":
+    d/psad.preinst: also revert changes to conffile when we install with an
+    old version.
+    (Closes: #675231)
+
+ -- gregor herrmann <gregoa@debian.org>  Thu, 04 Jul 2013 20:04:45 +0200
+
 psad (2.2.1-2) unstable; urgency=low
 
   * Enabled back the kmsgsd daemon.
