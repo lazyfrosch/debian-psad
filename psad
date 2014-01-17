@@ -20,9 +20,9 @@
 #
 # Credits: (see the CREDITS file bundled with the psad sources.)
 #
-# Version: 2.2.1
+# Version: 2.2.2
 #
-# Copyright (C) 1999-2012 Michael Rash (mbr@cipherdyne.org)
+# Copyright (C) 1999-2014 Michael Rash (mbr@cipherdyne.org)
 #
 # Reference: Snort is a registered trademark of Sourcefire, Inc.
 #
@@ -145,7 +145,7 @@ use strict;
 ### ========================== main =================================
 
 ### set the current version
-my $version = '2.2.1';
+my $version = '2.2.2';
 
 ### default config file for psad (can be changed with
 ### --config switch)
@@ -463,6 +463,9 @@ my $tcp_win_scale_type = 3;
 my $tcp_sack_type      = 4;
 my $tcp_timestamp_type = 8;
 
+### for EXPECT_TCP_OPTIONS handling
+my $found_one_tcp_options_field = 0;
+
 my %tcp_p0f_opt_types = (
     'N' => $tcp_nop_type,
     'M' => $tcp_mss_type,
@@ -564,6 +567,7 @@ my %pkt_NF_init = (
     'fwsnort_rnum'  => 0,
     'fwsnort_estab' => 0,
     'is_topera'     => 0,  ### Topera IPv6 scanner detection, requires --log-ip-options
+    'is_masscan'    => 0,  ### Masscan detection, requires --log-tcp-options
     'chain'         => '',
     'log_prefix'    => '',
     'dshield_str'   => '',
@@ -673,7 +677,7 @@ unless ($no_daemon or $debug) {
 ### we're at it, start psadwatchd as well.  Note that this is the best
 ### place to start the other daemons since we just wrote the psad pid
 ### to PID_FILE above.
-my $cmd;
+my $cmd = '';
 unless ($config{'ENABLE_SYSLOG_FILE'} eq 'Y'
         or $no_kmsgsd
         or $config{'SYSLOG_DAEMON'} =~ /ulog/i
@@ -1322,7 +1326,8 @@ sub check_scan() {
         $curr_scan{$pkt{'src'}}{$pkt{'dst'}}{'syslog_host'}
             {$pkt{'syslog_host'}} = '' if $pkt{'syslog_host'};
 
-        $curr_scan{$pkt{'src'}}{$pkt{'dst'}}{'is_topera'} = $pkt{'is_topera'};
+        $curr_scan{$pkt{'src'}}{$pkt{'dst'}}{'is_topera'}  = $pkt{'is_topera'};
+        $curr_scan{$pkt{'src'}}{$pkt{'dst'}}{'is_masscan'} = $pkt{'is_masscan'};
 
         if ($pkt{'log_prefix'}) {
             ### see if the logging prefix matches the blocking
@@ -1773,10 +1778,22 @@ sub parse_NF_pkt_str() {
             return $PKT_ERROR;
         }
 
-        ### don't pickup IP options if --log-ip-options is used
-        ### (they appear before the PROTO= field).
+        ### look for TCP options, but don't pickup IP options if
+        ### also --log-ip-options is used (IP options appear before
+        ### the PROTO= field).
         if ($pkt_str =~ /URGP=\S+\s+OPT\s+\((\S+)\)/) {
             $pkt_hr->{'tcp_opts'} = $1;
+            $found_one_tcp_options_field = 1
+                if $config{'EXPECT_TCP_OPTIONS'} eq 'Y';
+        }
+
+        if ($pkt_hr->{'flags'}
+                and $pkt_hr->{'flags'} eq 'SYN'
+                and $found_one_tcp_options_field
+                and not $pkt_hr->{'tcp_opts'}) {
+            $pkt_hr->{'is_masscan'} = 1;
+            print STDERR "    Masscan SYN scan\n"
+                if $debug;
         }
 
         if ($pkt_str =~ /\sSEQ=(\d+)\s+ACK=(\d+)/) {
@@ -3324,7 +3341,7 @@ sub psad_init() {
     ### setup the appropriate iptables data file depending on whether
     ### SYSLOG_DAEMON is set to ulogd, or if ENABLE_SYSLOG_FILE is set
     ### to 'Y'
-    unless ($fw_data_file) {
+    unless ($benchmark or $fw_data_file) {
         if ($config{'SYSLOG_DAEMON'} =~ /ulog/i) {
             $fw_data_file = $config{'ULOG_DATA_FILE'};
         } elsif ($config{'ENABLE_SYSLOG_FILE'} eq 'Y') {
@@ -5508,6 +5525,10 @@ sub scan_logr() {
                         $scan_style_str = "Topera $flags scan";
                         printf $fh "%${log_len}s%s\n", $prefix,
                             "[$flags: $n_pkts packets, Topera $flags scan]";
+                    } elsif ($curr_scan_hr->{$src}->{$dst}->{'is_masscan'}) {
+                        $scan_style_str = "Masscan $flags scan";
+                        printf $fh "%${log_len}s%s\n", $prefix,
+                            "[$flags: $n_pkts packets, Masscan $flags scan]";
                     } else {
                         if ($nmap_opts) {
                             printf $fh "%${log_len}s%s\n", $prefix,
@@ -6043,6 +6064,10 @@ sub renew_auto_blocked_ips() {
                 my $orig_block_time = $2;
 
                 if ($config{'AUTO_BLOCK_TIMEOUT'} == 0) {
+
+                    ### set the DL here to the minimum currently required
+                    $scan_dl{$ip} = $config{'AUTO_IDS_DANGER_LEVEL'};
+
                     ### block the IP address (note that checks are built
                     ### into this function to not add a duplicate rule)
                     &ipt_block($ip, 'renew');
@@ -6059,6 +6084,10 @@ sub renew_auto_blocked_ips() {
                         &ipt_rm_block($ip);
 
                     } else {
+
+                        ### set the DL here to the minimum currently required
+                        $scan_dl{$ip} = $config{'AUTO_IDS_DANGER_LEVEL'};
+
                         ### block the IP address (note that checks are built
                         ### into this function to not add a duplicate rule)
                         &ipt_block($ip, 'renew');
@@ -6081,6 +6110,10 @@ sub renew_auto_blocked_ips() {
                 my $orig_block_time = $2;
 
                 if ($config{'AUTO_BLOCK_TIMEOUT'} == 0) {
+
+                    ### set the DL here to the minimum currently required
+                    $scan_dl{$ip} = $config{'AUTO_IDS_DANGER_LEVEL'};
+
                     ### block the IP address (note that checks are built
                     ### into this function to not add a duplicate rule)
                     if (&tcpwr_test_block($ip)) {
@@ -6105,6 +6138,10 @@ sub renew_auto_blocked_ips() {
                         &tcpwr_rm_block($ip);
 
                     } else {
+
+                        ### set the DL here to the minimum currently required
+                        $scan_dl{$ip} = $config{'AUTO_IDS_DANGER_LEVEL'};
+
                         ### block the IP address (note that checks are built
                         ### into this function to not add a duplicate rule)
                         if (&tcpwr_test_block($ip)) {
@@ -7387,11 +7424,12 @@ sub analysis_mode() {
         push @local_nets, $net;
     }
 
-    print "[+] Entering analysis mode.  Parsing $fw_data_file\n";
     my $fh = '';
     if ($pkts_from_stdin) {
+        print "[+] Entering analysis mode.  Parsing STDIN\n";
         $fh = *STDIN;
     } else {
+        print "[+] Entering analysis mode.  Parsing $fw_data_file\n";
         open MSGS, "< $fw_data_file" or die "[*] Could not open ",
             "$fw_data_file: $!";
         $fh = *MSGS;
@@ -10978,7 +11016,7 @@ sub required_vars() {
         ICMP6_TYPES_FILE PROTOCOL_SCAN_THRESHOLD PROTOCOLS_FILE
         AUTO_BLOCK_DL1_TIMEOUT AUTO_BLOCK_DL2_TIMEOUT
         AUTO_BLOCK_DL3_TIMEOUT AUTO_BLOCK_DL4_TIMEOUT
-        AUTO_BLOCK_DL5_TIMEOUT EMAIL_THROTTLE
+        AUTO_BLOCK_DL5_TIMEOUT EMAIL_THROTTLE EXPECT_TCP_OPTIONS
     ));
     &defined_vars(\@required_vars);
     return;
@@ -10999,6 +11037,8 @@ Usage: psad [options]
 Options:
 
     -A,  --Analyze-msgs           - Analyze iptables logfile and exit.
+         --stdin                  - In --Analyze-msgs mode, acquire iptables
+                                    log data from STDIN.
     -e,  --email-analysis         - Send emails for scans detected in
                                     offline analysis mode.
     -m,  --messages-file <file>   - Specify the path to the iptables logfile
