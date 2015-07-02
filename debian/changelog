@@ -1,3 +1,9 @@
+psad (2.2.5-1~ppa+1) trusty; urgency=medium
+
+  * [0f0a7f6] Imported Upstream version 2.2.5
+
+ -- Markus Frosch <lazyfrosch@debian.org>  Thu, 02 Jul 2015 14:07:12 +0200
+
 psad (2.2.3-1) unstable; urgency=low
 
   * Imported Upstream version 2.2.3
