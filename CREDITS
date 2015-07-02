@@ -31,6 +31,8 @@ Albert E. Whale
     - Helped troubleshoot the PL_sv_undef issue for installation on Mandriva
       systems.
     - Discovered IP resolution bug in psad-2.1 for auto_dl lines.
+    - Reported an uninitialized variable bug in --fw-block-ip usage (github
+      issue #17).
 
 Manual Caphina
     - Greatly assisting in the first version of Bastille-NIDS which
@@ -384,6 +386,7 @@ James Neff
       pointing psad at the /etc/rsyslog.conf file.
 
 Franck Joncourt
+    - Debian psad package maintainer.
     - Performed analysis of locale settings for fwknop installer and suggested
       using the LC_ALL environmental variable instead of the LANG variable
       (which is superseded by LC_* vars).
@@ -441,6 +444,9 @@ Dan A. Dickey
       iproute2 does not.  So, for a multi-homed interface (eth0 with multiple
       addresses), ifconfig -a only shows the first one configured and not the
       rest.  ip addr shows all of the configured addresses...".
+    - Valuable input around whois process handling w.r.t. zombie processes.
+      This helped to lead to a solution using fork() and exec(), and was
+      tracked by Github issue #15.
 
 Graham Murray
     - Reported a bug where 8-bit data included in some whois output causes mail
@@ -511,3 +517,15 @@ Tim Kramer
 Wolfgang Breyha
     - Submitted a patch to allow VLAN interfaces and interface aliases in
       IGNORE_INTERFACES.  This fixes issue #8 on github.
+
+Steve Murphy
+    - Contributed a patch to exec a script upon only blocking events. Two new
+      config variables EXTERNAL_BLOCK_SCRIPT and ENABLE_EXT_BLOCK_SCRIPT_EXEC
+      were added for this feature.
+
+Rinck Sonnenberg
+    - Spotted install.pl exit code bug when uninstalling psad. Fixed in
+      psad-2.2.5.
+    - Developed UFW and Logstash integration capabilities for psad:
+        Logstash:  https://gist.github.com/netson/cc6ffa751aa4610c13c0
+        UFW:       https://gist.github.com/netson/c45b2dc4e835761fbccc
