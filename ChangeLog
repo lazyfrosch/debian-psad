@@ -1,3 +1,32 @@
+psad-2.2.5 (02/09/2015):
+    - Added signature to detect fwknop Single Packet Authorization (SPA)
+      packets that are destined to the default UDP port 62201. More
+      information about fwknop can be found here:
+
+        https://www.cipherdyne.org/fwknop/
+
+    - (Rinck Sonnenberg): Spotted install.pl exit code bug when uninstalling
+      psad. Gettting this fixed will enable a proper Puppet module to be
+      developed which Rinck is working on.
+    - (Rinck Sonnenberg) UFW and Logstash integration capabilities for psad
+      are now available:
+
+        Logstash:  https://gist.github.com/netson/cc6ffa751aa4610c13c0
+        UFW:       https://gist.github.com/netson/c45b2dc4e835761fbccc
+
+psad-2.2.4 (01/16/2015):
+    - (Steve Murphy) Added the ability to run an external script whenever an
+      IP is blocked. Two new config variables were added to support this
+      feature, ENABLE_EXT_BLOCK_SCRIPT_EXEC and EXTERNAL_BLOCK_SCRIPT.
+    - Bug fix to not create zombie whois processes when whois lookups take too
+      long to complete for whatever reason (slow network, etc.). This fixes
+      issue #15 on Github. The bug was reported by "3Turtles" to the psad
+      mailing list, and Dan Dickey provided valuable input.
+    - Bug fix for uninitialized variable in --fw-block-ip handling reported by
+      Albert Whale (fixes issue #17).
+    - Bug fix in reverse DNS resolution for IP addresses that cannot be
+      properly resolved.
+
 psad-2.2.3 (03/01/2014):
     - Added compatibility with 'upstart' init daemons with assistance from Tim
       Kramer.  This change adds a new config variable 'ENABLE_PSADWATCHD' that

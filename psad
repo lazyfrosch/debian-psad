@@ -8,7 +8,7 @@
 #
 # Purpose: psad makes use of iptables logs to detect port scans,
 #          probes for backdoors and DDoS tools, and other suspect traffic
-#          (many signatures were adapted from the Snort intrusion
+#          (many signatures were adapted from the SNORT intrusion
 #          detection system).  Data is provided by parsing syslog
 #          firewall messages out of /var/log/messages (or wherever syslog
 #          is configured to write iptables logs to).
@@ -20,11 +20,11 @@
 #
 # Credits: (see the CREDITS file bundled with the psad sources.)
 #
-# Version: 2.2.3
+# Version: 2.2.5
 #
 # Copyright (C) 1999-2014 Michael Rash (mbr@cipherdyne.org)
 #
-# Reference: Snort is a registered trademark of Sourcefire, Inc.
+# Reference: SNORT is a registered trademark of Sourcefire, Inc.
 #
 # License (GNU Public License):
 #
@@ -145,7 +145,7 @@ use strict;
 ### ========================== main =================================
 
 ### set the current version
-my $version = '2.2.3';
+my $version = '2.2.5';
 
 ### default config file for psad (can be changed with
 ### --config switch)
@@ -728,7 +728,6 @@ if ($config{'ENABLE_AUTO_IDS'} eq 'Y') {
 ### and for reaping zombie whois processes.
 $SIG{'__WARN__'} = \&warn_handler;
 $SIG{'__DIE__'}  = \&die_handler;
-$SIG{'CHLD'}     = \&REAPER;
 $SIG{'USR1'}     = \&usr1_handler;
 $SIG{'HUP'}      = \&hup_handler;
 
@@ -5728,10 +5727,13 @@ sub scan_logr() {
 
                     if ($config{'ENABLE_EXT_SCRIPT_EXEC'} eq 'Y') {
                         if ($config{'EXEC_EXT_SCRIPT_PER_ALERT'} eq 'Y') {
-                            &exec_external_script($src);
+                            &exec_external_script($src, $config{'EXTERNAL_SCRIPT'});
+                            $scan_ext_exec{$src} = '';
                         } else {
-                            &exec_external_script($src) unless
-                                defined $scan_ext_exec{$src};
+                            unless (defined $scan_ext_exec{$src}) {
+                                &exec_external_script($src, $config{'EXTERNAL_SCRIPT'});
+                                $scan_ext_exec{$src} = '';
+                            }
                         }
                     }
                 }
@@ -6016,25 +6018,28 @@ sub print_chains_and_prefixes() {
 }
 
 sub exec_external_script() {
-    my $src = shift;
-    $scan_ext_exec{$src} = '';
-    my $cmd = $config{'EXTERNAL_SCRIPT'};
+    my ($src, $cmd) = @_;
+
     $cmd =~ s/SRCIP/$src/;
+
     my $pid;
-    if ($pid = fork()) {
-        local $SIG{'ALRM'} = sub {die "[*] External script timeout.\n"};
-        alarm 30;  ### the external script should be finished in 30 secs.
-        eval {
-            waitpid($pid, 0);
-        };
-        alarm 0;
-        if ($@) {
-            kill 9, $pid;
+    local $SIG {'ALRM'} = sub {kill 15, $pid or die "[*] kill: $!";
+        die "[*] External script timeout.\n"};
+    eval {
+        $pid = fork();
+
+        die "Could not fork for external script: $!" unless defined $pid;
+
+        unless ($pid) {
+            exec qq{$cmd};
+            die "script exec failed: $!";
         }
-    } else {
-        die "[*] Could not fork for external script: $!" unless defined $pid;
-        exec qq{$cmd};
-    }
+        alarm 30;
+
+        waitpid $pid => 0;
+
+        alarm 0;
+    };
     return;
 }
 
@@ -6485,6 +6490,10 @@ sub ipt_block() {
         }
         &sys_log($mail_msg);
 
+        if ($config{'ENABLE_EXT_BLOCK_SCRIPT_EXEC'} eq 'Y') {
+            &exec_external_script($ip, $config{'EXTERNAL_BLOCK_SCRIPT'});
+        }
+
         ### write the ip out to the auto blocked file
         &diskwrite_blocked_ip($ip,
             $config{'AUTO_BLOCK_IPT_FILE'}, $renewed_status);
@@ -6574,8 +6583,7 @@ sub ipt_rm_block() {
         unless ($flush_fw) {
             ### don't send timeout email if we are manually flushing
             ### the auto-block rules from the command line with --Flush.
-            &sys_log("removed iptables auto-block against " .
-                $ip);
+            &sys_log("removed iptables auto-block against $ip");
             if ($config{'ENABLE_AUTO_IDS_EMAILS'} eq 'Y') {
                 &send_mail("$config{'MAIL_STATUS_PREFIX'} removed " .
                     "iptables block against $ip", '',
@@ -6652,7 +6660,15 @@ sub check_ipt_cmd() {
             if ($line =~ m|add\s+($ipv4_re)\s*$|i
                     or $line =~ m|add\s+($ipv4_re/\d+)\s*$|i
                     or $line =~ m|add\s+($ipv4_re/$ipv4_re)\s*$|i) {
-                ### instantiate the blocking rule
+                my $ip_net = $1;
+
+                my $ip_only = '';
+                $ip_only = $1 if $line =~ /\s($ipv4_re)/;
+
+                ### instantiate the blocking rule, force a DL value
+                ### equal to the AUTO_IDS_DANGER_LEVEL setting
+                $scan_dl{$ip_only} = $config{'AUTO_IDS_DANGER_LEVEL'};
+
                 &ipt_block($1, '');
             } elsif ($line =~ m|del\s+($ipv4_re)\s*$|i
                     or $line =~ m|del\s+($ipv4_re/\d+)\s*$|i
@@ -6965,6 +6981,9 @@ sub get_block_timeout() {
     my $timeout_str = "for $timeout seconds";
     $timeout_str = '(unlimited timeout)' if $timeout == $PERMANENT;
 
+    print STDERR "[+] get_block_timeout() dl: $dl, $timeout, $timeout_str\n"
+        if $debug;
+
     return ($timeout, $timeout_str);
 }
 
@@ -7257,10 +7276,12 @@ sub get_dns_info() {
     } else {
         my $ipaddr = gethostbyname($ip);
         ### gethostbyaddr($ipaddr, AF_INET);
-        my $dns_tmp = gethostbyaddr($ipaddr, 2);
-        $dns_str = $dns_tmp if $dns_tmp;
-        $dns_cache{$ip}{'ctr'}      = 0;
-        $dns_cache{$ip}{'hostname'} = $dns_str;
+        if (defined $ipaddr) {
+            my $dns_tmp = gethostbyaddr($ipaddr, 2);
+            $dns_str = $dns_tmp if $dns_tmp;
+            $dns_cache{$ip}{'ctr'}      = 0;
+            $dns_cache{$ip}{'hostname'} = $dns_str;
+        }
     }
     return $dns_str;
 }
@@ -7277,15 +7298,35 @@ sub get_whois_info() {
         $whois_cache{$ip}++;
     } else {
         $whois_cache{$ip} = 0;
+
+        my $pid;
+
+        local $SIG {'ALRM'} = sub {kill 15, $pid or die "[*] kill: $!";
+            die "whois alarm"};
         eval {
-            local $SIG{'ALRM'} = sub {die "whois alarm\n"};
+            $pid = fork();
+
+            die "Could not fork(): $!" unless defined $pid;
+
+            unless ($pid) {
+
+                ### perl invokes the shell because of the output
+                ### redirect
+                exec "$cmds{'whois'} $ip > $whois_datafile";
+
+                die "whois $ip exec failed: $!";
+            }
             alarm $config{'WHOIS_TIMEOUT'};
-            system "$cmds{'whois'} $ip > $whois_datafile 2> /dev/null";
+
+            waitpid $pid => 0;
+
             alarm 0;
         };
+
         if ($@) {
-            ### die unless $@ eq "whois alarm\n";
-            ### warn "$@: $?";  ### let the warning handler save the error.
+            system "$cmds{'killall'} $cmds{'whois'}";
+            kill 9, $pid unless kill 15, $pid;
+            print STDERR "[-] whois alarm on pid: $pid\n" if $debug;
             warn $@;
             $#whois_data = 0;
             @whois_data = ("Whois data not available!\n");
@@ -7306,16 +7347,6 @@ sub get_whois_info() {
     }
 
     return \@whois_data;
-}
-
-sub REAPER {
-    my $pid;
-    $pid = waitpid(-1, WNOHANG);
-#   if (WIFEXITED($?)) {
-#       print STDERR "[+] **  Process $pid exited.\n";
-#   }
-    $SIG{'CHLD'} = \&REAPER;
-    return;
 }
 
 sub stop_psad() {
@@ -9010,6 +9041,10 @@ sub print_blocked_ip_status() {
             ### older versions do not have the timestamp
             if ($line =~ /^\s*\S+\s+(\d+)/) {
                 $timestamp = $1;
+                unless (defined $scan_dl{$ip}) {
+                    ### set the DL here to the minimum currently required
+                    $scan_dl{$ip} = $config{'AUTO_IDS_DANGER_LEVEL'};
+                }
                 my ($timeout, $timeout_str) = &get_block_timeout($scan_dl{$ip});
                 if ($timeout > 0) {
                     $time_remain = $timeout - (time() - $timestamp);
@@ -10439,6 +10474,7 @@ sub run_command() {
     my ($cmd_path, $args) = @_;
     my $cmd = $cmd_path;
     $cmd .= " $args" if $args;
+    print STDERR "[+] run_command(): $cmd\n" if $debug;
     open CMD, "$cmd |" or die "[*] Could not ",
         "execute $cmd: $!";
     my @lines = <CMD>;
@@ -11026,7 +11062,7 @@ sub required_vars() {
         AUTO_BLOCK_DL1_TIMEOUT AUTO_BLOCK_DL2_TIMEOUT
         AUTO_BLOCK_DL3_TIMEOUT AUTO_BLOCK_DL4_TIMEOUT
         AUTO_BLOCK_DL5_TIMEOUT EMAIL_THROTTLE EXPECT_TCP_OPTIONS
-        ENABLE_PSADWATCHD
+        ENABLE_PSADWATCHD ENABLE_EXT_BLOCK_SCRIPT_EXEC EXTERNAL_BLOCK_SCRIPT
     ));
     &defined_vars(\@required_vars);
     return;

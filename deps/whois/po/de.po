@@ -1,0 +1,308 @@
+# Translation of whois to German
+# Copyright (C) 2001 Simon Richter <Simon.Richter@in.tum.de>, 2004 Adrian 
+# Bunk <bunk@fs.tum.de>, 2010 Chris Leick <c.leick@vollbio.de>.
+# This file is distributed under the same license as the whois package.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: whois 5.0.1\n"
+"Report-Msgid-Bugs-To: Marco d'Itri <md@linux.it>\n"
+"POT-Creation-Date: 2010-01-27 13:38+0100\n"
+"PO-Revision-Date: 2010-02-28 11:16+GMT\n"
+"Last-Translator: Chris Leick <c.leick@vollbio.de>\n"
+"Language-Team: German <debian-l10n-german@lists.debian.org>\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=n != 1;\n"
+
+#: ../whois.c:136
+#, c-format
+msgid ""
+"Version %s.\n"
+"\n"
+"Report bugs to %s.\n"
+msgstr ""
+"Version %s.\n"
+"\n"
+"Berichten Sie Fehler auf Englisch an %s.\n"
+
+#: ../whois.c:190 ../whois.c:243 ../whois.c:249 ../whois.c:256 ../whois.c:286
+#, c-format
+msgid "Using server %s.\n"
+msgstr "Server %s wird benutzt.\n"
+
+#: ../whois.c:228
+msgid "This TLD has no whois server, but you can access the whois database at"
+msgstr ""
+"Diese TLD hat keinen Whois-Server, kann aber auf eine Whois-Datenbank "
+"zugreifen unter"
+
+#: ../whois.c:233
+msgid "This TLD has no whois server."
+msgstr "Diese TLD hat keinen Whois-Server."
+
+#: ../whois.c:236
+msgid "No whois server is known for this kind of object."
+msgstr "Für diese Art des Objekts ist kein Whois-Server bekannt."
+
+#: ../whois.c:239
+msgid "Unknown AS number or IP network. Please upgrade this program."
+msgstr ""
+"Unbekannte AS- oder IP-Netzwerk-Nummer. Bitte führen Sie ein Upgrade dieses "
+"Programms durch."
+
+#: ../whois.c:262
+#, c-format
+msgid ""
+"\n"
+"Querying for the IPv4 endpoint %s of a 6to4 IPv6 address.\n"
+"\n"
+msgstr ""
+"\n"
+"Abfrage des IPv4-Endpunkts %s einer 6to4 IPv6-Adresse.\n"
+"\n"
+
+#: ../whois.c:268
+#, c-format
+msgid ""
+"\n"
+"Querying for the IPv4 endpoint %s of a Teredo IPv6 address.\n"
+"\n"
+msgstr ""
+"\n"
+"Abfrage des IPv4-Endpunkts %s einer Teredo-IPv6-Adresse.\n"
+"\n"
+
+#: ../whois.c:287
+#, c-format
+msgid ""
+"Query string: \"%s\"\n"
+"\n"
+msgstr ""
+"Abfragezeichenkette: »%s«\n"
+"\n"
+
+#: ../whois.c:297
+#, c-format
+msgid ""
+"\n"
+"\n"
+"Found a referral to %s.\n"
+"\n"
+msgstr ""
+"\n"
+"\n"
+"Verweis auf %s gefunden.\n"
+"\n"
+
+#: ../whois.c:339 ../whois.c:342
+#, c-format
+msgid "Cannot parse this line: %s"
+msgstr "Diese Zeile kann nicht ausgewertet werden: %s"
+
+#: ../whois.c:506
+msgid "Warning: RIPE flags used with a traditional server."
+msgstr ""
+"Warnung: RIPE-Flags wurden mit einem »traditionellen« Server verwendet."
+
+#: ../whois.c:657 ../whois.c:806
+msgid ""
+"Catastrophic error: disclaimer text has been changed.\n"
+"Please upgrade this program.\n"
+msgstr ""
+"Katastrophaler Fehler: Haftungsausschlusstext wurde geändert.\n"
+"Bitte führen Sie ein Upgrade dieses Programms durch.\n"
+
+#: ../whois.c:858
+#, c-format
+msgid "Host %s not found."
+msgstr "Host %s nicht gefunden."
+
+#: ../whois.c:868
+#, c-format
+msgid "%s/tcp: unknown service"
+msgstr "%s/tcp: unbekannter Dienst"
+
+#: ../whois.c:943
+msgid "Timeout."
+msgstr "Zeitüberschreitung"
+
+#: ../whois.c:949
+#, c-format
+msgid "Interrupted by signal %d..."
+msgstr "Durch Signal %d unterbrochen ..."
+
+#: ../whois.c:1175
+#, c-format
+msgid ""
+"Usage: whois [OPTION]... OBJECT...\n"
+"\n"
+"-l                     one level less specific lookup [RPSL only]\n"
+"-L                     find all Less specific matches\n"
+"-m                     find first level more specific matches\n"
+"-M                     find all More specific matches\n"
+"-c                     find the smallest match containing a mnt-irt "
+"attribute\n"
+"-x                     exact match [RPSL only]\n"
+"-d                     return DNS reverse delegation objects too [RPSL "
+"only]\n"
+"-i ATTR[,ATTR]...      do an inverse lookup for specified ATTRibutes\n"
+"-T TYPE[,TYPE]...      only look for objects of TYPE\n"
+"-K                     only primary keys are returned [RPSL only]\n"
+"-r                     turn off recursive lookups for contact information\n"
+"-R                     force to show local copy of the domain object even\n"
+"                       if it contains referral\n"
+"-a                     search all databases\n"
+"-s SOURCE[,SOURCE]...  search the database from SOURCE\n"
+"-g SOURCE:FIRST-LAST   find updates from SOURCE from serial FIRST to LAST\n"
+"-t TYPE                request template for object of TYPE ('all' for a "
+"list)\n"
+"-v TYPE                request verbose template for object of TYPE\n"
+"-q [version|sources|types]  query specified server info [RPSL only]\n"
+"-F                     fast raw output (implies -r)\n"
+"-h HOST                connect to server HOST\n"
+"-p PORT                connect to PORT\n"
+"-H                     hide legal disclaimers\n"
+"      --verbose        explain what is being done\n"
+"      --help           display this help and exit\n"
+"      --version        output version information and exit\n"
+msgstr ""
+"Aufruf: whois [OPTION]... OBJEKT...\n"
+"\n"
+"-l                     eine Ebene unspezifischere Suche [nur RPSL]\n"
+"-L                     unspezifischere Treffer suchen\n"
+"-m                     eine Ebene spezifischere Treffer suchen\n"
+"-M                     alle spezifischeren Treffer suchen\n"
+"-c                     den kleinsten Treffer suchen, der ein\n"
+"                       mnt-irt-Attribut enthält.\n"
+"-x                     exakte Treffer [nur RPSL]\n"
+"-d                     auch DNS-Rückübertragungsobjekte zurückgeben\n"
+"                       [nur RPSL]\n"
+"-i ATTR[,ATTR]...      eine umgekehrte Suche für angegebene ATTRibute\n"
+"                       ausführen\n"
+"-T TYP[,TYP]...        nur nach Objekten vom Typ TYP suchen\n"
+"-K                     nur Primärschlüssel zeigen [nur RPSL]\n"
+"-r                     Rückwärtsauflösung für Kontaktinformationen\n"
+"                       ausschalten\n"
+"-R                     lokale Kopie des Domainobjekts zeigen, auch wenn es\n"
+"                       einen Verweis enthält\n"
+"-a                     alle Datenbanken durchsuchen\n"
+"-s QUELLE[,QUELLE]...  in der Datenbank aus der QUELLE suchen\n"
+"-g QUELLE:BEGINN-ENDE  finde Aktualisierungen der QUELLE von BEGINN bis ENDE\n"
+"-t TYP                 Schablone für Typ TYP anfordern (»all« für eine \n"
+"                       Liste)\n"
+"-v TYP                 detaillierte Schablone für Objekt des TYPs anfordern\n"
+"-q [version|sources|types]\n"
+"                       nach angegebener Server-Information fragen [nur RPSL]\n"
+"-F                     »schnelle« Rohdatenausgabe (impliziert -r)\n"
+"-h HOST                zum Server HOST verbinden\n"
+"-p PORT                zu PORT verbinden\n"
+"-H                     Haftungsausschluss nicht anzeigen\n"
+"      --verbose        erklären, was getan wird\n"
+"      --help           diese Hilfe zeigen und beenden\n"
+"      --version        Version ausgeben und beenden\n"
+
+#: ../mkpasswd.c:80
+msgid "standard 56 bit DES-based crypt(3)"
+msgstr "Standard 56-Bit DES-basiertes Crypt(3)"
+
+#: ../mkpasswd.c:162
+#, c-format
+msgid "Invalid method '%s'.\n"
+msgstr "Ungültige Methode »%s«\n"
+
+#: ../mkpasswd.c:171 ../mkpasswd.c:181
+#, c-format
+msgid "Invalid number '%s'.\n"
+msgstr "Falsche Nummer »%s«.\n"
+
+#: ../mkpasswd.c:199
+#, c-format
+msgid "Try '%s --help' for more information.\n"
+msgstr "Versuchen Sie »%s --help«, um weitere Informationen zu erhalten.\n"
+
+#: ../mkpasswd.c:240
+#, c-format
+msgid "Wrong salt length: %d byte when %d expected.\n"
+msgid_plural "Wrong salt length: %d bytes when %d expected.\n"
+msgstr[0] "Falsche Salt-Länge: %d Byte, aber %d wurden erwartet.\n"
+msgstr[1] "Falsche Salt-Länge: %d Bytes, aber %d wurden erwartet.\n"
+
+#: ../mkpasswd.c:245
+#, c-format
+msgid "Wrong salt length: %d byte when %d <= n <= %d expected.\n"
+msgid_plural "Wrong salt length: %d bytes when %d <= n <= %d expected.\n"
+msgstr[0] "Falsche Salt-Länge: %d Byte, aber %d <= n <= %d wurden erwartet.\n"
+msgstr[1] "Falsche Salt-Länge: %d Bytes, aber %d <= n <= %d wurden erwartet.\n"
+
+#: ../mkpasswd.c:254
+#, c-format
+msgid "Illegal salt character '%c'.\n"
+msgstr "Illegales Salt-Zeichen »%c«.\n"
+
+#: ../mkpasswd.c:299 ../mkpasswd.c:326
+#, c-format
+msgid "Password: "
+msgstr "Passwort: "
+
+#: ../mkpasswd.c:320
+#, c-format
+msgid "Illegal password character '0x%hhx'.\n"
+msgstr "Illegaler Passwortzeichen »0x%hhx«.\n"
+
+#: ../mkpasswd.c:342
+#, c-format
+msgid "Method not supported by crypt(3).\n"
+msgstr "Methode nicht von »crypt(3)« unterstützt.\n"
+
+#: ../mkpasswd.c:420
+#, c-format
+msgid ""
+"Usage: mkpasswd [OPTIONS]... [PASSWORD [SALT]]\n"
+"Crypts the PASSWORD using crypt(3).\n"
+"\n"
+msgstr ""
+"Aufruf: mkpasswd [OPTIONEN] ... [PASSWORT] [SALT]]\n"
+"Verschlüsselt das PASSWORT mit »crypt(3)«.\n"
+"\n"
+
+#: ../mkpasswd.c:423
+#, c-format
+msgid ""
+"      -m, --method=TYPE     select method TYPE\n"
+"      -5                    like --method=md5\n"
+"      -S, --salt=SALT       use the specified SALT\n"
+"      -R, --rounds=NUMBER   use the specified NUMBER of rounds\n"
+"      -P, --password-fd=NUM read the password from file descriptor NUM\n"
+"                            instead of /dev/tty\n"
+"      -s, --stdin           like --password-fd=0\n"
+"      -h, --help            display this help and exit\n"
+"      -V, --version         output version information and exit\n"
+"\n"
+"If PASSWORD is missing then it is asked interactively.\n"
+"If no SALT is specified, a random one is generated.\n"
+"If TYPE is 'help', available methods are printed.\n"
+"\n"
+"Report bugs to %s.\n"
+msgstr ""
+"      -m, --method=TYP      die Methode TYP auswählen\n"
+"      -5                    wie --method=md5\n"
+"      -S, --salt=SALT       angegebenes SALT benutzen\n"
+"      -R, --rounds=ANZAHL   angegebene ANZAHL von Runden benutzen\n"
+"      -P, --password-fd=NUM das Passwort vom Dateideskriptor NUM anstatt\n"
+"                            von /dev/tty lesen\n"
+"      -s, --stdin           wie --password-fd=0\n"
+"      -h, --help            diese Hilfe anzeigen und beenden\n"
+"      -V, --version         Versionsinformationen anzeigen und beenden\n"
+"\n"
+"Falls das PASSWORT fehlt, wird es interaktiv erfragt.\n"
+"Falls SALT nicht angegeben wurde, wird ein zufälliges erzeugt.\n"
+"Wenn der TYP »help« ist, werden die verfügbaren Methoden ausgegeben.\n"
+"\n"
+"Berichten Sie Fehler auf Englisch an %s.\n"
+
+#: ../mkpasswd.c:452
+#, c-format
+msgid "Available methods:\n"
+msgstr "Verfügbare Methoden:\n"

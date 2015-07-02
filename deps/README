@@ -1,0 +1,21 @@
+This directory contains perl modules and other dependencies used by psad.
+These dependencies are included in this directory to ease the installation
+process, but if psad is being installed on a system where all necessary
+dependencies are already installed then it is recommended to install from one
+of the psad "nodeps" tarballs or RPM's.  These distributions of psad do not
+include any perl modules or other dependencies:
+
+http://www.cipherdyne.org/psad/download/
+
+The complete list of dependencies is:
+
+Bit-Vector
+Date-Calc
+IPTables-ChainMgr
+IPTables-Parse
+NetAddr-IP
+Storable
+Unix-Syslog
+
+whois          <-- whois client
+snort_rules    <-- Directory for Snort rules
